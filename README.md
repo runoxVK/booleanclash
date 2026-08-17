@@ -87,7 +87,17 @@ inputs exactly once, so it can never qualify — "merge everything into one chip
 is impossible by construction, with no whitelist needed.
 
 Costs: define = expanded gate count + 1 packaging fee; each later instance = 1;
-chip size cap ~8 nodes. All four numbers are tuning knobs (M6).
+chip size cap ~8 nodes. All four numbers live in
+[`tuning.ts`](packages/engine/src/tuning.ts) and are the M6 dials — nothing else
+in the engine hardcodes a cost.
+
+Two properties worth not breaking, both locked in by tests in
+`test/cost.test.ts`:
+
+- A 2-gate chip used twice **breaks even**, so micro-merges are pointless and
+  players must find real structure. The cliff sits at 3 gates.
+- Faking a second instance at the same binding to earn a merge **loses points**,
+  independently of M3 rejecting it at merge time.
 
 Chip identity is **behavioural, not structural** — same arity + same truth table
 means same chip, however it was wired. That is what powers "you discovered XOR"
@@ -99,7 +109,7 @@ and prevents hoarding variants.
 |---|---|
 | M0 | Scaffold — **done** |
 | M1 | Truth tables + circuit model + evaluation — **done** |
-| M2 | `cost.ts` — real scoring: definition cost, packaging fee, reuse fee |
+| M2 | `cost.ts` — scoring with itemized breakdown — **done** |
 | M3 | `merge.ts` — pattern matching, binding check, chip registry, codex |
 | M4 | `generate.ts` — puzzle curation, filtered for paradigm diversity |
 | M5 | `packages/app` — the editor UI |

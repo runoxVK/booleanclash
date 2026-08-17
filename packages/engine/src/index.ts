@@ -8,5 +8,7 @@
  */
 
 export * from './types.js';
+export * from './tuning.js';
 export * from './truthtable.js';
 export * from './circuit.js';
+export * from './cost.js';
