@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    /* bigint literals (1n) need ES2020 or later. */
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Forces `import type` for type-only imports. Good habit, and required
+       for the app package later when Vite strips types file-by-file. */
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}

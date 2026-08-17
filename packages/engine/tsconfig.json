@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    /* The engine must run in a browser AND on a server, so it may not touch
+       Node globals. Emptying `types` removes @types/node from this project, so
+       `process`, `Buffer`, `fs`, and friends fail to compile in here. That turns
+       the architectural rule in the README into something the compiler checks.
+       If you ever genuinely need a Node API, it belongs in a different package. */
+    "types": []
+  },
+  "include": ["src", "test"]
+}

@@ -4,29 +4,52 @@ Build a target logic function from NOT/AND/OR using the fewest chips.
 
 ## Commands
 
+First time, or after pulling:
+
 ```bash
-npm test
+npm install
 ```
+
+Everything CI runs — typecheck plus tests. This is the one to use before pushing:
+
+```bash
+npm run check
+```
+
+Re-runs the affected tests every time you save. Leave it open while working:
 
 ```bash
 npm run test:watch
 ```
 
+Runs `scripts/play.ts`, a scratch pad for poking at the engine by hand. Edit it
+freely — it is not tested and not shipped:
+
 ```bash
-npm run typecheck
+npm run play
 ```
+
+CI runs `npm run check` on every push and pull request
+(`.github/workflows/ci.yml`).
 
 ## Layout
 
 ```
 packages/engine/   All game rules. Zero dependencies. No rendering.
 packages/app/      (M5) Vite + React + @xyflow/react. Owns no rules.
+scripts/play.ts    Dev scratch pad.
 ```
 
 **The one architectural rule:** every game rule lives in `engine`, which knows
 nothing about pixels. `engine` runs unchanged in the browser (instant feedback)
 and later on the server (scoring authority + anti-cheat). If a rule ever exists
 in two places, the anti-cheat story is dead. No exceptions.
+
+This is enforced by the compiler, not by good intentions:
+`packages/engine/tsconfig.json` sets `"types": []`, which strips `@types/node`
+from that project. Reaching for `process`, `Buffer`, or `fs` inside the engine is
+a compile error, because the engine has to run in a browser too. Dev scripts get
+Node globals; the engine does not.
 
 ## Truth table conventions
 
