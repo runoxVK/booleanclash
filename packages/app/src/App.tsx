@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { evaluate, score, type NodeId } from '@logiclash/engine';
+import { coach, describeGoal } from './coach';
 import { Board } from './components/Board';
+import { HowToPlay } from './components/HowToPlay';
 import { ScorePanel } from './components/ScorePanel';
 import { Toolbox } from './components/Toolbox';
 import { TruthTable } from './components/TruthTable';
@@ -8,19 +10,24 @@ import {
   clearSelection,
   currentProposal,
   deleteSelected,
+  dockOutput,
   mergeSelection,
   newGame,
   placeChip,
   placeGate,
+  selectSuggestion,
   setOutput,
+  suggestMerge,
   toggleSelect,
   type GameState,
 } from './game';
 import { loadProgress, recordSolve, type Progress } from './progress';
 import { nextPuzzle, PUZZLES, puzzleById } from './puzzles';
 
-const OPENING_PUZZLE = PUZZLES[1];
+/** Start on the gentlest puzzle. Double Trouble is a bad first impression. */
+const OPENING_PUZZLE = PUZZLES[0];
 const UNDO_LIMIT = 60;
+const SEEN_HELP_KEY = 'logiclash.seenHelp.v1';
 
 export function App() {
   const [state, setState] = useState<GameState>(() => newGame(OPENING_PUZZLE));
@@ -29,6 +36,22 @@ export function App() {
     new Array(OPENING_PUZZLE.inputCount).fill(false),
   );
   const [progress, setProgress] = useState<Progress>(loadProgress);
+  const [showHelp, setShowHelp] = useState(() => {
+    try {
+      return localStorage.getItem(SEEN_HELP_KEY) === null;
+    } catch {
+      return true;
+    }
+  });
+
+  const dismissHelp = useCallback(() => {
+    setShowHelp(false);
+    try {
+      localStorage.setItem(SEEN_HELP_KEY, '1');
+    } catch {
+      // Private browsing; showing the card again is a fine failure mode.
+    }
+  }, []);
 
   /** Switch positions and truth-table row are the same state seen two ways. */
   const probeRow = inputBits.reduce(
@@ -78,6 +101,13 @@ export function App() {
 
   const proposal = useMemo(() => currentProposal(state), [state]);
 
+  /* Only look for an unnoticed merge when the current selection is not already
+     one, so the hint does not fight the thing the player is doing. */
+  const suggestion = useMemo(
+    () => (proposal.ok ? null : suggestMerge(state)),
+    [proposal.ok, state],
+  );
+
   const focusId: NodeId | null =
     state.selection.length === 1 ? state.selection[0] : state.circuit.outputId;
   const actual = focusId !== null ? values.get(focusId) ?? null : null;
@@ -87,6 +117,35 @@ export function App() {
   const solved =
     state.circuit.outputId !== null &&
     values.get(state.circuit.outputId) === state.puzzle.target;
+
+  /* The moment a part computes the target, dock it. Requiring the player to
+     separately discover "set as output" is a dead end nobody enjoys finding. */
+  useEffect(() => {
+    if (state.circuit.outputId !== null) return;
+    for (const [id, value] of values) {
+      if (value !== state.puzzle.target) continue;
+      const node = state.circuit.nodes.get(id);
+      if (node && node.kind !== 'INPUT') {
+        setState((s) => (s.circuit.outputId === null ? dockOutput(s, id) : s));
+        return;
+      }
+    }
+  }, [values, state.circuit, state.puzzle.target]);
+
+  const guidance = coach(
+    state,
+    values,
+    proposal,
+    solved,
+    breakdown.total,
+    state.puzzle.par,
+    suggestion,
+  );
+
+  const highlightSuggestion = useCallback(() => {
+    if (!suggestion) return;
+    setState((s) => selectSuggestion(s, suggestion.selection));
+  }, [suggestion]);
 
   /* Bank the score the moment it is achieved, not on some "submit" button. */
   const bankedFor = useRef<string | null>(null);
@@ -119,6 +178,7 @@ export function App() {
         delete: () => apply(deleteSelected),
         backspace: () => apply(deleteSelected),
         u: undo,
+        f: highlightSuggestion,
         escape: () => setState(clearSelection),
       };
 
@@ -131,7 +191,7 @@ export function App() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [apply, undo]);
+  }, [apply, undo, highlightSuggestion]);
 
   const best = progress[state.puzzle.id];
   const upNext = nextPuzzle(state.puzzle.id);
@@ -160,19 +220,27 @@ export function App() {
         <span className="tally">
           {solvedCount}/{PUZZLES.length} solved
         </span>
+        <button className="ghost" onClick={() => setShowHelp(true)}>
+          How to play
+        </button>
         <button className="ghost" onClick={() => startPuzzle(state.puzzle.id)}>
           Reset
         </button>
       </header>
 
+      {showHelp && <HowToPlay onClose={dismissHelp} />}
+
       <Toolbox
         chips={[...state.registry.values()]}
+        selected={state.selection.length}
         onPlaceGate={(kind) => apply((s) => placeGate(s, kind))}
         onPlaceChip={(chipId) => apply((s) => placeChip(s, chipId))}
         onTrash={() => apply(deleteSelected)}
       />
 
       <main>
+        <div className={`coach ${guidance.tone}`}>{guidance.text}</div>
+
         {solved && (
           <div className="banner">
             <span>
@@ -223,12 +291,14 @@ export function App() {
             }
           />
           <p className="caption">
-            {state.selection.length === 1
-              ? 'Comparing the selected part.'
-              : state.circuit.outputId !== null
-                ? 'Comparing the output.'
-                : 'Select a part, or set one as the output.'}
+            {describeGoal(state.puzzle.inputCount)}
             <br />
+            <br />
+            {state.selection.length === 1
+              ? 'The GOT column is the part you have selected.'
+              : state.circuit.outputId !== null
+                ? 'The GOT column is your output.'
+                : 'Select a part to compare it against the target.'}{' '}
             Clicking a row flips the switches to match it.
           </p>
         </div>
@@ -249,6 +319,19 @@ export function App() {
             </button>
             <button onClick={() => apply(setOutput)}>
               Set as output <kbd>&crarr;</kbd>
+            </button>
+            <button
+              className={suggestion ? 'ready' : ''}
+              disabled={!suggestion}
+              onClick={highlightSuggestion}
+              title={
+                suggestion
+                  ? `Highlight a repeated shape worth ${suggestion.saved}`
+                  : 'No repeated shape on the board yet'
+              }
+            >
+              {suggestion ? `Find repeat · ${suggestion.name}` : 'Find repeat'}
+              <kbd>F</kbd>
             </button>
             <button disabled={past.length === 0} onClick={undo}>
               Undo <kbd>U</kbd>

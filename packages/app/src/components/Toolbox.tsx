@@ -6,28 +6,42 @@ interface PartCardProps {
   readonly name: string;
   readonly arity: number;
   readonly isChip?: boolean;
+  /** How many parts are selected right now. */
+  readonly selected: number;
   readonly hint: string;
   readonly onClick: () => void;
 }
 
 /**
- * A component in the toolbox, drawn as the thing it will become. Showing the
- * actual shape — pins and all — means the palette and the board speak the same
- * visual language, so you learn one vocabulary instead of two.
+ * A component in the toolbox, drawn as the thing it will become.
+ *
+ * The card also answers "can I use this right now?" without being clicked. A
+ * gate needs exactly as many selected signals as it has pins, and that rule is
+ * invisible until you break it — so the card states its requirement, greys out
+ * when the selection does not fit, and lights up when it does.
  */
-function PartCard({ name, arity, isChip, hint, onClick }: PartCardProps) {
+function PartCard({
+  name,
+  arity,
+  isChip,
+  selected,
+  hint,
+  onClick,
+}: PartCardProps) {
   const W = 76;
   const H = 38;
   const ox = 12;
   const oy = 13;
 
+  const ready = selected === arity;
+  const classes = ['part-card'];
+  if (isChip) classes.push('chip');
+  if (ready) classes.push('ready');
+  else classes.push('waiting');
+
   return (
-    <button
-      className={`part-card${isChip ? ' chip' : ''}`}
-      onClick={onClick}
-      title={hint}
-    >
-      <svg width={100} height={64}>
+    <button className={classes.join(' ')} onClick={onClick} title={hint}>
+      <svg width={100} height={58}>
         <g className="card-part">
           <circle className="pin" cx={ox + W / 2} cy={oy} r={8} />
           <rect className="body" x={ox} y={oy} width={W} height={H} rx={8} />
@@ -49,12 +63,16 @@ function PartCard({ name, arity, isChip, hint, onClick }: PartCardProps) {
           })}
         </g>
       </svg>
+      <span className="needs">
+        {ready ? 'ready' : `needs ${arity}`}
+      </span>
     </button>
   );
 }
 
 interface ToolboxProps {
   readonly chips: readonly ChipDefinition[];
+  readonly selected: number;
   readonly onPlaceGate: (kind: 'NOT' | 'AND' | 'OR') => void;
   readonly onPlaceChip: (chipId: string) => void;
   readonly onTrash: () => void;
@@ -62,6 +80,7 @@ interface ToolboxProps {
 
 export function Toolbox({
   chips,
+  selected,
   onPlaceGate,
   onPlaceChip,
   onTrash,
@@ -69,24 +88,32 @@ export function Toolbox({
   return (
     <div className="toolbox">
       <h2>Toolbox</h2>
+      <p className="toolbox-note">
+        {selected === 0
+          ? 'Select parts on the board first'
+          : `${selected} selected`}
+      </p>
 
       <div className="parts">
         <PartCard
           name="not"
           arity={1}
-          hint="Inverts one signal. Select 1 signal, then click. (N)"
+          selected={selected}
+          hint="Inverts one signal. Select 1 part, then click. (N)"
           onClick={() => onPlaceGate('NOT')}
         />
         <PartCard
           name="and"
           arity={2}
-          hint="On when both inputs are on. Select 2 signals, then click. (A)"
+          selected={selected}
+          hint="On when both inputs are on. Select 2 parts, then click. (A)"
           onClick={() => onPlaceGate('AND')}
         />
         <PartCard
           name="or"
           arity={2}
-          hint="On when either input is on. Select 2 signals, then click. (O)"
+          selected={selected}
+          hint="On when either input is on. Select 2 parts, then click. (O)"
           onClick={() => onPlaceGate('OR')}
         />
 
@@ -97,14 +124,15 @@ export function Toolbox({
             name={chip.name}
             arity={chip.arity}
             isChip
-            hint={`Your ${chip.name} chip — ${chip.gateCost} gates inside, costs 1 to reuse.`}
+            selected={selected}
+            hint={`Your ${chip.name} chip — ${chip.gateCost} gates inside, but only 1 to place again.`}
             onClick={() => onPlaceChip(chip.id)}
           />
         ))}
       </div>
 
       <button className="trash" onClick={onTrash} title="Delete selection (Del)">
-        <svg width={26} height={26} viewBox="0 0 24 24">
+        <svg width={24} height={24} viewBox="0 0 24 24">
           <path d="M4 6h16M9 6V4h6v2M6 6l1 15h10l1-15M10 10v8M14 10v8" />
         </svg>
       </button>

@@ -2,6 +2,7 @@ import {
   applyMerge,
   CircuitBuilder,
   proposeMerge,
+  TUNING,
   type ChipId,
   type ChipRegistry,
   type Circuit,
@@ -182,6 +183,22 @@ export function deleteSelected(state: GameState): GameState {
   };
 }
 
+/**
+ * Dock a part as the output without going through the selection.
+ *
+ * Used when a part turns out to compute the target: making the player realise
+ * they must separately declare an output is a dead end nobody enjoys finding.
+ */
+export function dockOutput(state: GameState, id: NodeId): GameState {
+  const node = state.circuit.nodes.get(id);
+  if (!node || node.kind === 'INPUT') return state;
+  return {
+    ...state,
+    circuit: withNodes(state.circuit, new Map(state.circuit.nodes), id),
+    message: 'That part matches the target — docked it as the output.',
+  };
+}
+
 export function setOutput(state: GameState): GameState {
   if (state.selection.length !== 1) {
     return { ...state, message: 'Select exactly one gate to make it the output.' };
@@ -205,6 +222,69 @@ export function setOutput(state: GameState): GameState {
 /** The live proposal for the current selection — drives the merge button. */
 export function currentProposal(state: GameState) {
   return proposeMerge(state.circuit, [...state.selection], state.registry);
+}
+
+/**
+ * Everything feeding `id`, stopping at circuit inputs. Null if it grows past
+ * `limit`, since nothing that big can become a chip anyway.
+ */
+function coneOf(
+  circuit: Circuit,
+  id: NodeId,
+  limit: number,
+): NodeId[] | null {
+  const seen = new Set<NodeId>();
+  const stack: NodeId[] = [id];
+
+  while (stack.length > 0) {
+    const current = stack.pop() as NodeId;
+    if (seen.has(current)) continue;
+
+    const node = circuit.nodes.get(current);
+    if (!node || node.kind === 'INPUT') continue;
+
+    seen.add(current);
+    if (seen.size > limit) return null;
+    stack.push(...node.inputs);
+  }
+
+  return [...seen];
+}
+
+/**
+ * Hunt the board for a merge the player has not spotted.
+ *
+ * Without this, the central mechanic is invisible: you only learn merging
+ * exists if you happen to select exactly the right parts first. The scan tries
+ * the cone above each part — which is what a player would select anyway — and
+ * returns whichever legal merge saves the most.
+ */
+export function suggestMerge(state: GameState): {
+  readonly selection: NodeId[];
+  readonly name: string;
+  readonly saved: number;
+} | null {
+  let best: { selection: NodeId[]; name: string; saved: number } | null = null;
+
+  for (const node of state.circuit.nodes.values()) {
+    if (node.kind === 'INPUT') continue;
+
+    const cone = coneOf(state.circuit, node.id, TUNING.maxChipNodes);
+    if (!cone || cone.length < 2) continue;
+
+    const proposal = proposeMerge(state.circuit, cone, state.registry);
+    if (!proposal.ok) continue;
+
+    const { name, saved } = proposal.candidate;
+    if (!best || saved > best.saved) best = { selection: cone, name, saved };
+  }
+
+  return best;
+}
+
+/** Select the parts of a suggested merge, so the player can see the shape. */
+export function selectSuggestion(state: GameState, ids: readonly NodeId[]): GameState {
+  return { ...state, selection: [...ids], message: null };
 }
 
 export function mergeSelection(state: GameState): GameState {
