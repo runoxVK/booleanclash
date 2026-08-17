@@ -24,6 +24,8 @@ export function App() {
   const [state, setState] = useState<GameState>(() =>
     newGame(PUZZLES[OPENING_PUZZLE]),
   );
+  /** Which input combination the board is showing live signals for. */
+  const [probeRow, setProbeRow] = useState<number | null>(null);
 
   const values = useMemo(() => {
     try {
@@ -88,7 +90,10 @@ export function App() {
           value={state.puzzle.id}
           onChange={(e) => {
             const next = PUZZLES.find((p) => p.id === e.target.value);
-            if (next) setState(newGame(next));
+            if (next) {
+              setState(newGame(next));
+              setProbeRow(null);
+            }
           }}
         >
           {PUZZLES.map((p) => (
@@ -111,6 +116,8 @@ export function App() {
             target={state.puzzle.target}
             actual={actual}
             actualLabel={actualLabel}
+            probeRow={probeRow}
+            onProbe={setProbeRow}
           />
           <p className="caption">
             {state.selection.length === 1
@@ -118,6 +125,10 @@ export function App() {
               : state.circuit.outputId !== null
                 ? 'Comparing the output gate.'
                 : 'Select a gate, or set one as the output.'}
+            <br />
+            {probeRow === null
+              ? 'Click a row to trace it through the board.'
+              : 'Tracing that row — click again to stop.'}
           </p>
         </div>
       </aside>
@@ -134,6 +145,7 @@ export function App() {
           values={values}
           selection={state.selection}
           target={state.puzzle.target}
+          probeRow={probeRow}
           onToggle={(id) => setState(toggleSelect(state, id))}
         />
       </main>

@@ -1,15 +1,26 @@
+/*
+ * Schematic look: paper background, boxy components with pin stubs, right-angle
+ * wiring, and traces that light up when they carry a 1. The restraint is the
+ * point — a circuit diagram should read as a diagram, so colour is reserved for
+ * signal state, selection, and error rather than decoration.
+ */
+
 :root {
-  --bg: #12151b;
-  --panel: #1a1f28;
-  --panel-2: #212836;
-  --line: #2e3746;
-  --ink: #e6ebf2;
-  --dim: #8d99ab;
-  --accent: #4f9dff;
-  --good: #4ade80;
-  --bad: #f87171;
-  --warm: #fbbf24;
-  --chip: #a78bfa;
+  --paper: #f2f1ec;
+  --panel: #ffffff;
+  --rule: #d3d1c8;
+  --rule-strong: #2f2e2b;
+  --ink: #24231f;
+  --dim: #77756c;
+  --faint: #a8a69c;
+
+  --on: #1e9e52;
+  --off: #a8a69c;
+  --sel: #1668c4;
+  --chip: #6b3fbe;
+  --bad: #c0392b;
+  --warm: #b7791f;
+
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -19,16 +30,16 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
 }
 
 kbd {
   margin-left: auto;
   padding: 1px 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #0e1116;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fbfaf7;
   color: var(--dim);
   font-size: 10px;
   font-family: ui-monospace, monospace;
@@ -40,14 +51,14 @@ kbd {
 
 .app {
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr) 290px;
+  grid-template-columns: 236px minmax(0, 1fr) 292px;
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     'header header header'
     'left main right';
-  gap: 14px;
+  gap: 13px;
   height: 100vh;
-  padding: 14px;
+  padding: 13px;
 }
 
 header {
@@ -55,14 +66,16 @@ header {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--rule);
 }
 
 header h1 {
   margin: 0;
-  font-size: 19px;
-  letter-spacing: 0.02em;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 header .hint {
@@ -76,10 +89,10 @@ header .ghost {
 }
 
 select {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel-2);
+  padding: 5px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--panel);
   color: var(--ink);
   font-size: 13px;
 }
@@ -91,7 +104,7 @@ aside.right {
   grid-area: right;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 13px;
   overflow-y: auto;
 }
 main {
@@ -99,13 +112,13 @@ main {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 10px;
+  gap: 9px;
 }
 
 .panel {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  padding: 13px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
   background: var(--panel);
 }
 
@@ -113,53 +126,54 @@ main {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
+  margin: 0 0 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--dim);
 }
 
 .panel h3 {
-  margin: 16px 0 8px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  margin: 15px 0 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--dim);
 }
 
 .caption {
-  margin: 10px 0 0;
+  margin: 9px 0 0;
   color: var(--dim);
   font-size: 11.5px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .why {
   margin: 8px 0 0;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-left: 2px solid var(--warm);
-  background: #241f14;
-  color: #e8d9b5;
+  background: #fdf6e4;
+  color: #6b5518;
   font-size: 11.5px;
   line-height: 1.45;
 }
 
 .message {
-  margin: 10px 0 0;
-  color: var(--accent);
+  margin: 9px 0 0;
+  color: var(--sel);
   font-size: 12px;
 }
 
 .banner {
-  padding: 9px 14px;
-  border: 1px solid #2b5f3d;
-  border-radius: 9px;
-  background: #16301f;
-  color: var(--good);
+  padding: 8px 13px;
+  border: 1px solid #9ccfb0;
+  border-radius: 4px;
+  background: #e7f6ec;
+  color: #14663a;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* ---------------------------------------------------------------- */
@@ -169,11 +183,11 @@ main {
 .buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 6px;
 }
 .buttons.wide {
   flex-direction: column;
-  margin-top: 12px;
+  margin-top: 11px;
 }
 
 button {
@@ -181,10 +195,10 @@ button {
   flex: 1;
   align-items: center;
   gap: 7px;
-  padding: 8px 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-2);
+  padding: 7px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--panel);
   color: var(--ink);
   font-size: 12.5px;
   font-weight: 600;
@@ -192,18 +206,17 @@ button {
 }
 
 button:hover:not(:disabled) {
-  border-color: #4a586e;
-  background: #29313f;
+  background: #eceae3;
 }
 
 button:disabled {
-  color: #5b6779;
+  border-color: var(--rule);
+  color: var(--faint);
   cursor: not-allowed;
-  opacity: 0.65;
 }
 
 button.ghost {
-  background: none;
+  border-color: var(--rule);
   font-weight: 500;
   color: var(--dim);
 }
@@ -220,15 +233,15 @@ button.chip-btn {
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
-  border-color: #4b3d78;
-  background: #241d3c;
+  border-color: var(--chip);
+  background: #f4efff;
   color: var(--chip);
 }
 
 button.merge.ready {
-  border-color: #2f6f4a;
-  background: #17331f;
-  color: var(--good);
+  border-color: var(--on);
+  background: #e7f6ec;
+  color: #14663a;
 }
 
 /* ---------------------------------------------------------------- */
@@ -243,21 +256,29 @@ table.truth {
 }
 
 table.truth th {
-  padding: 3px 0 6px;
+  padding: 2px 0 5px;
+  border-bottom: 1px solid var(--rule-strong);
   color: var(--dim);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+table.truth tbody tr {
+  cursor: pointer;
+}
+table.truth tbody tr:hover {
+  background: #eceae3;
+}
+
 table.truth td {
-  padding: 2px 0;
+  padding: 1.5px 0;
   text-align: center;
 }
 
 table.truth td.in {
-  color: #6f7b8e;
+  color: var(--faint);
 }
 
 table.truth th.want,
@@ -266,17 +287,27 @@ table.truth th.got {
 }
 
 table.truth tr.hit td.got {
-  color: var(--good);
+  color: var(--on);
 }
 table.truth tr.miss td.got {
   color: var(--bad);
   font-weight: 700;
 }
 table.truth tr.miss {
-  background: #2a1a1c;
+  background: #fbeceb;
 }
 table.truth tr.blank td.got {
-  color: #4a5566;
+  color: var(--faint);
+}
+
+table.truth tr.probed {
+  outline: 1.5px solid var(--sel);
+  outline-offset: -1.5px;
+  background: #e7f0fb;
+}
+table.truth tr.probed td.in {
+  color: var(--sel);
+  font-weight: 700;
 }
 
 /* ---------------------------------------------------------------- */
@@ -284,7 +315,7 @@ table.truth tr.blank td.got {
 /* ---------------------------------------------------------------- */
 
 .score-total {
-  font-size: 26px;
+  font-size: 25px;
   font-weight: 700;
   color: var(--ink);
   letter-spacing: 0;
@@ -295,8 +326,8 @@ table.truth tr.blank td.got {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 5px 0;
-  border-top: 1px solid #242c39;
+  padding: 4px 0;
+  border-top: 1px solid var(--rule);
   font-size: 12.5px;
   font-family: ui-monospace, monospace;
 }
@@ -320,7 +351,7 @@ table.truth tr.blank td.got {
 }
 
 .ledger-row em.good {
-  color: var(--good);
+  color: var(--on);
 }
 .ledger-row em.bad {
   color: var(--bad);
@@ -330,9 +361,9 @@ table.truth tr.blank td.got {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid var(--rule-strong);
   color: var(--dim);
   font-size: 12px;
 }
@@ -342,10 +373,10 @@ table.truth tr.blank td.got {
   font-weight: 700;
 }
 .verdict.great {
-  color: var(--good);
+  color: var(--on);
 }
 .verdict.good {
-  color: var(--accent);
+  color: var(--sel);
 }
 .verdict.okay {
   color: var(--warm);
@@ -359,10 +390,12 @@ table.truth tr.blank td.got {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  /* Faint engineering grid. */
   background:
-    radial-gradient(circle at 1px 1px, #232b38 1px, transparent 0) 0 0 / 22px 22px,
+    linear-gradient(#e6e4dc 1px, transparent 1px) 0 0 / 100% 20px,
+    linear-gradient(90deg, #e6e4dc 1px, transparent 1px) 0 0 / 20px 100%,
     var(--panel);
 }
 
@@ -373,83 +406,108 @@ svg.board {
 
 .wire {
   fill: none;
-  stroke: #46536a;
-  stroke-width: 2;
+  stroke: #8b8981;
+  stroke-width: 1.75;
+  stroke-linejoin: miter;
 }
 
-.node {
+.wire.hot {
+  stroke: var(--on);
+  stroke-width: 2.5;
+}
+
+.pin {
+  stroke: #8b8981;
+  stroke-width: 1.75;
+}
+.pin.hot {
+  stroke: var(--on);
+  stroke-width: 2.5;
+}
+
+.part {
   cursor: pointer;
 }
 
-.node rect {
-  fill: var(--panel-2);
-  stroke: var(--line);
-  stroke-width: 1.5;
+.part .body {
+  fill: var(--panel);
+  stroke: var(--rule-strong);
+  stroke-width: 1.75;
 }
 
-.node:hover rect {
-  stroke: #5b6b85;
+.part:hover .body {
+  fill: #f6f4ee;
 }
 
-.node text {
+.part text {
   text-anchor: middle;
   pointer-events: none;
 }
 
-.node-label {
+.part-label {
   fill: var(--ink);
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.node-bits {
-  fill: #78849a;
-  font-size: 8.5px;
-  font-family: ui-monospace, monospace;
   letter-spacing: 0.06em;
 }
 
-.node.kind-input rect {
-  fill: #1b2a3d;
-  stroke: #2f4b6b;
-}
-.node.kind-input .node-label {
-  fill: var(--accent);
+.part-bits {
+  fill: var(--faint);
+  font-size: 8px;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.055em;
 }
 
-.node.kind-chip rect {
-  fill: #241d3c;
-  stroke: #4b3d78;
+.part-bit {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  fill: var(--faint);
 }
-.node.kind-chip .node-label {
+.part.hot .part-bit {
+  fill: var(--on);
+}
+
+.part.kind-input .body {
+  fill: #eef3fb;
+}
+.part.kind-input .part-label {
+  fill: var(--sel);
+}
+
+.part.kind-chip .body {
+  fill: #f4efff;
+  stroke: var(--chip);
+}
+.part.kind-chip .part-label {
   fill: var(--chip);
 }
 
-.node.selected rect {
-  stroke: var(--accent);
-  stroke-width: 2.5;
+.part.selected .body {
+  stroke: var(--sel);
+  stroke-width: 3;
 }
 
-.node.matches rect {
-  stroke: var(--good);
+.part.matches .body {
+  stroke-dasharray: none;
+  stroke: var(--on);
 }
 
-.node.output rect {
-  stroke-dasharray: 4 3;
-  stroke-width: 2.5;
+.part.output .body {
+  stroke-width: 3;
 }
 
-.order-dot {
-  fill: var(--accent);
+.order-tag {
+  fill: var(--sel);
 }
 .order-num {
-  fill: #0c1017;
-  font-size: 10px;
+  fill: #fff;
+  font-size: 9.5px;
   font-weight: 700;
 }
-.match-tick {
-  fill: var(--good);
-  font-size: 12px;
+.out-tag {
+  fill: var(--dim);
+  font-size: 8.5px;
   font-weight: 700;
+  letter-spacing: 0.14em;
 }

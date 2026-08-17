@@ -7,20 +7,27 @@ interface TruthTableProps {
   readonly actual: bigint | null;
   /** What `actual` refers to, for the column header. */
   readonly actualLabel: string;
+  /** Row currently being probed on the board. */
+  readonly probeRow: number | null;
+  readonly onProbe: (row: number | null) => void;
 }
 
 /**
  * Target versus current, row by row.
  *
- * The row-by-row diff is the game's main feedback channel: it tells the player
- * not just that they are wrong but exactly which input combinations are wrong,
- * which is what makes the next move findable.
+ * Two jobs. First, the row-by-row diff is the main feedback channel: it says not
+ * just that you are wrong but exactly which input combinations are wrong, which
+ * is what makes the next move findable. Second, clicking a row probes it — the
+ * board then shows real signal values for that combination instead of whole
+ * truth tables, so you can watch one case flow through the circuit.
  */
 export function TruthTable({
   inputCount,
   target,
   actual,
   actualLabel,
+  probeRow,
+  onProbe,
 }: TruthTableProps) {
   const rows = 1 << inputCount;
   const names: string[] = [];
@@ -43,11 +50,18 @@ export function TruthTable({
         {Array.from({ length: rows }, (_, r) => {
           const want = (target >> BigInt(r)) & 1n;
           const got = actual === null ? null : (actual >> BigInt(r)) & 1n;
-          const state =
-            got === null ? 'blank' : got === want ? 'hit' : 'miss';
+
+          const classes = [
+            got === null ? 'blank' : got === want ? 'hit' : 'miss',
+          ];
+          if (probeRow === r) classes.push('probed');
 
           return (
-            <tr key={r} className={state}>
+            <tr
+              key={r}
+              className={classes.join(' ')}
+              onClick={() => onProbe(probeRow === r ? null : r)}
+            >
               {names.map((n, i) => (
                 <td key={n} className="in">
                   {(r >> (inputCount - 1 - i)) & 1}
