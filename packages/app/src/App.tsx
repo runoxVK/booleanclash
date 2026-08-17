@@ -239,7 +239,11 @@ export function App() {
       />
 
       <main>
-        <div className={`coach ${guidance.tone}`}>{guidance.text}</div>
+        {/* Once solved the banner says it, so only keep the coach around when
+            it still has something new to add. */}
+        {(!solved || suggestion) && (
+          <div className={`coach ${guidance.tone}`}>{guidance.text}</div>
+        )}
 
         {solved && (
           <div className="banner">
@@ -273,6 +277,12 @@ export function App() {
       </main>
 
       <aside className="right">
+        <ScorePanel
+          breakdown={breakdown}
+          par={state.puzzle.par}
+          solved={solved}
+          best={best}
+        />
         <div className="panel">
           <h2>Target</h2>
           <TruthTable
@@ -346,12 +356,6 @@ export function App() {
           )}
         </div>
 
-        <ScorePanel
-          breakdown={breakdown}
-          par={state.puzzle.par}
-          solved={solved}
-          best={best}
-        />
       </aside>
     </div>
   );

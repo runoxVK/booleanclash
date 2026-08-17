@@ -1,6 +1,6 @@
-import type { ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { ChipRegistry, Circuit, NodeId } from '@logiclash/engine';
-import { CEILING, layout, NODE_H, NODE_W } from '../layout';
+import { layout, NODE_H, NODE_W } from '../layout';
 
 const INPUT_NAMES = 'abcdefgh';
 const PIN_R = 9;
@@ -55,8 +55,43 @@ export function Board({
   onToggle,
   onFlipInput,
 }: BoardProps) {
-  const { positions, width, height } = layout(circuit);
   const selectionIndex = new Map(selection.map((id, i) => [id, i + 1]));
+
+  /* The work area should fill its pane rather than sitting as a small box in a
+     large empty one. Measure the pane, scale a small circuit up a little to suit
+     it, and centre the result; oversized circuits keep their size and scroll. */
+  const pane = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = pane.current;
+    if (!el) return;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  /* Zoom has to respect BOTH dimensions. Sizing on width alone blows a
+     multi-layer circuit up until it overflows the bottom of the pane. */
+  const natural = layout(circuit);
+  const scale =
+    box.w > 0 && box.h > 0
+      ? Math.max(
+          0.5,
+          Math.min(1.6, box.w / natural.width, box.h / natural.height),
+        )
+      : 1;
+
+  const { positions, width, height } = layout(
+    circuit,
+    box.h > 0 ? box.h / scale : 0,
+  );
+
+  const canvasW = Math.max(box.w, width * scale);
+  const canvasH = Math.max(box.h, height * scale);
+  const offsetX = (canvasW - width * scale) / 2;
 
   const bitOf = (id: NodeId): number | null => {
     const value = values.get(id);
@@ -98,10 +133,11 @@ export function Board({
     circuit.outputId !== null ? positions.get(circuit.outputId) : undefined;
 
   return (
-    <div className="board-scroll">
-      <svg className="board" width={width} height={height}>
-        <rect className="canvas" x={0} y={0} width={width} height={height} />
+    <div className="board-scroll" ref={pane}>
+      <svg className="board" width={canvasW} height={canvasH}>
+        <rect className="canvas" x={0} y={0} width={canvasW} height={canvasH} />
 
+        <g transform={`translate(${offsetX} 0) scale(${scale})`}>
         {outSource && (
           <path
             className={`wire${outBit === 1 ? ' hot' : ''}`}
@@ -197,10 +233,12 @@ export function Board({
                 </g>
               )}
 
+              {/* Square, because round numbered badges would read as pins —
+                  and a pin's number is a signal value, not a selection order. */}
               {order !== undefined && (
                 <g className="order">
-                  <circle cx={10} cy={10} r={9} />
-                  <text x={10} y={13.5}>
+                  <rect x={4} y={4} width={17} height={16} rx={3} />
+                  <text x={12.5} y={16}>
                     {order}
                   </text>
                 </g>
@@ -212,6 +250,7 @@ export function Board({
         <text className="dock-label" x={10} y={height - 18} textAnchor="start">
           Input
         </text>
+        </g>
       </svg>
     </div>
   );

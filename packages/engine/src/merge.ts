@@ -466,8 +466,9 @@ export function proposeMerge(
   if (matches.length < TUNING.minChipInstances) {
     return reject(
       'not-enough-instances',
-      `This shape appears ${matches.length} time(s) with different inputs. ` +
-        `A chip needs ${TUNING.minChipInstances}. Build it somewhere else first.`,
+      matches.length === 1
+        ? `This shape appears only once. Build it again on different signals and you can merge them.`
+        : `This shape appears ${matches.length} times on different signals; a chip needs ${TUNING.minChipInstances}.`,
       matches.length,
     );
   }

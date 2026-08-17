@@ -14,7 +14,7 @@
   --dim: #75746d;
   --faint: #a9a8a0;
 
-  --canvas: #b3aad6;
+  --canvas: #bcb4dc;
   --value: #cfe6f5;
   --on: #1c8f4a;
   --sel: #1668c4;
@@ -371,7 +371,7 @@ button.part-card:hover .card-part .body {
 }
 
 .part-card.waiting .card-part {
-  opacity: 0.42;
+  opacity: 0.5;
 }
 
 .part-card.ready .needs {
@@ -775,7 +775,7 @@ svg.board {
   fill: var(--on);
 }
 
-.order circle {
+.order rect {
   fill: var(--sel);
 }
 .order text {

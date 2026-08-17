@@ -21,7 +21,7 @@ export const CEILING = 78;
 const COL_GAP = 32;
 const ROW_GAP = 48;
 const PAD_X = 30;
-const PAD_BOTTOM = 30;
+const PAD_BOTTOM = 56;
 
 export interface Placement {
   readonly x: number;
@@ -34,7 +34,12 @@ export interface LayoutResult {
   readonly height: number;
 }
 
-export function layout(circuit: Circuit): LayoutResult {
+/**
+ * @param desiredHeight Stretch the layers to fill this height if they fit in it.
+ * Inputs stay pinned to the floor and the top layer to the ceiling, so the board
+ * reads as a frame with terminals on its edges rather than a clump in the middle.
+ */
+export function layout(circuit: Circuit, desiredHeight = 0): LayoutResult {
   const order = [...circuit.nodes.keys()];
   const rank = new Map<NodeId, number>(order.map((id, i) => [id, i]));
   const depths = new Map<NodeId, number>();
@@ -69,17 +74,30 @@ export function layout(circuit: Circuit): LayoutResult {
   const widest = Math.max(1, ...[...layers.values()].map((l) => l.length));
 
   const width = PAD_X * 2 + widest * NODE_W + (widest - 1) * COL_GAP;
-  const height =
+  const naturalHeight =
     CEILING + PAD_BOTTOM + layerCount * NODE_H + (layerCount - 1) * ROW_GAP;
+  const height = Math.max(naturalHeight, desiredHeight);
+
+  const floorY = height - PAD_BOTTOM - NODE_H;
+  const headroom = floorY - CEILING;
+  // Spread the layers over the available headroom, but never stretch them
+  // further apart than they need to be — a two-layer circuit in a tall pane
+  // should not put its gate a mile above its inputs.
+  const step =
+    topDepth > 0
+      ? Math.min(NODE_H + ROW_GAP * 2.2, headroom / topDepth)
+      : 0;
 
   const positions = new Map<NodeId, Placement>();
   for (const [depth, ids] of layers) {
     const span = ids.length * NODE_W + (ids.length - 1) * COL_GAP;
     const left = (width - span) / 2;
     // Depth 0 sits on the floor; higher depths climb toward the ceiling.
-    const y = CEILING + (topDepth - depth) * (NODE_H + ROW_GAP);
     ids.forEach((id, i) => {
-      positions.set(id, { x: left + i * (NODE_W + COL_GAP), y });
+      positions.set(id, {
+        x: left + i * (NODE_W + COL_GAP),
+        y: floorY - depth * step,
+      });
     });
   }
 

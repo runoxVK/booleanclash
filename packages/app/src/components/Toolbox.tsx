@@ -36,8 +36,11 @@ function PartCard({
   const ready = selected === arity;
   const classes = ['part-card'];
   if (isChip) classes.push('chip');
+  /* Only dim once there IS a selection that does not fit. Dimming everything
+     when nothing is selected makes the whole toolbox look broken on arrival,
+     which is the first thing anybody sees. */
   if (ready) classes.push('ready');
-  else classes.push('waiting');
+  else if (selected > 0) classes.push('waiting');
 
   return (
     <button className={classes.join(' ')} onClick={onClick} title={hint}>
