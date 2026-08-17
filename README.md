@@ -137,13 +137,26 @@ and prevents hoarding variants.
 | M1 | Truth tables + circuit model + evaluation — **done** |
 | M2 | `cost.ts` — scoring with itemized breakdown — **done** |
 | M3 | `merge.ts` + `codex.ts` — pattern matching, binding check, chip creation — **done** |
-| M5 | `packages/app` — playable UI, hand-authored puzzles — **done** |
-| M4 | `generate.ts` — puzzle curation, filtered for paradigm diversity |
-| M6 | Playtest and tune the four constants |
+| M5 | `packages/app` — playable UI — **done** |
+| M4 | `generate.ts` + `synthesis.ts` — seeded puzzle generation — **done** |
+| M6 | Playtest and tune the constants — **your turn** |
 
-M4 and M5 are swapped deliberately: the merge economy cannot be judged from a
-test suite, so the UI came first. `packages/app/src/puzzles.ts` holds four
-hand-authored puzzles until the generator lands.
+M4 and M5 were swapped deliberately: the merge economy cannot be judged from a
+test suite, so the UI came first.
+
+Puzzles are generated from a seed rather than shipped as data, so a puzzle is
+just a number: a daily is a date, a shared puzzle is a link, a bug report is
+reproducible. `npm run survey` prints the distribution of a batch — that is the
+instrument for M6. Change a number in `tuning.ts`, rerun, watch it move.
+
+Generation works backwards. A uniformly random target has no exploitable
+repeated structure, so instead a small motif is planted at several different
+bindings and the player is handed only the output column. The motif is
+synthesised from a solved table of minimal constructions
+([`synthesis.ts`](packages/engine/src/synthesis.ts)) rather than rolled at
+random — otherwise the generator plants a five-gate contraption that computes
+plain AND and then claims merging it saves you four. Par is "best known", not
+"provably optimal": a par the player can beat is better than one they cannot.
 
 ## Playing it
 

@@ -13,6 +13,7 @@
     "dev": "npm run dev -w @logiclash/app",
     "build": "npm run build -w @logiclash/app",
     "play": "tsx scripts/play.ts",
+    "survey": "tsx scripts/survey.ts",
     "check": "npm run typecheck && npm run test"
   },
   "devDependencies": {

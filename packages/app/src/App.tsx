@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { evaluate, score, type NodeId } from '@logiclash/engine';
 import { Board } from './components/Board';
 import { ScorePanel } from './components/ScorePanel';
@@ -16,40 +16,52 @@ import {
   toggleSelect,
   type GameState,
 } from './game';
-import { PUZZLES } from './puzzles';
+import { loadProgress, recordSolve, type Progress } from './progress';
+import { nextPuzzle, PUZZLES, puzzleById } from './puzzles';
 
-/** Double Trouble first: it is the puzzle that teaches what merging is for. */
-const OPENING_PUZZLE = 1;
+const OPENING_PUZZLE = PUZZLES[1];
+const UNDO_LIMIT = 60;
 
 export function App() {
-  const [state, setState] = useState<GameState>(() =>
-    newGame(PUZZLES[OPENING_PUZZLE]),
-  );
-  /** Switch positions for each circuit input, driving the live signal values. */
+  const [state, setState] = useState<GameState>(() => newGame(OPENING_PUZZLE));
+  const [past, setPast] = useState<GameState[]>([]);
   const [inputBits, setInputBits] = useState<boolean[]>(() =>
-    new Array(PUZZLES[OPENING_PUZZLE].inputCount).fill(false),
+    new Array(OPENING_PUZZLE.inputCount).fill(false),
   );
+  const [progress, setProgress] = useState<Progress>(loadProgress);
 
-  /* Switch positions and truth-table row are the same thing seen two ways. */
+  /** Switch positions and truth-table row are the same state seen two ways. */
   const probeRow = inputBits.reduce(
     (acc, on, i) => (on ? acc | (1 << i) : acc),
     0,
   );
 
-  const setProbeRow = (row: number) =>
-    setInputBits(
-      Array.from(
-        { length: state.puzzle.inputCount },
-        (_, i) => ((row >> i) & 1) === 1,
-      ),
-    );
+  /* Any move that changes the circuit is undoable. */
+  const apply = useCallback((move: (s: GameState) => GameState) => {
+    setState((current) => {
+      const next = move(current);
+      if (next.circuit !== current.circuit || next.registry !== current.registry) {
+        setPast((stack) => [...stack, current].slice(-UNDO_LIMIT));
+      }
+      return next;
+    });
+  }, []);
 
-  const startPuzzle = (puzzleId: string) => {
-    const next = PUZZLES.find((p) => p.id === puzzleId);
-    if (!next) return;
-    setState(newGame(next));
-    setInputBits(new Array(next.inputCount).fill(false));
-  };
+  const undo = useCallback(() => {
+    setPast((stack) => {
+      if (stack.length === 0) return stack;
+      setState(stack[stack.length - 1]);
+      return stack.slice(0, -1);
+    });
+  }, []);
+
+  const startPuzzle = useCallback((puzzleId: string) => {
+    const puzzle = puzzleById(puzzleId);
+    if (!puzzle) return;
+    setState(newGame(puzzle));
+    setPast([]);
+    setInputBits(new Array(puzzle.inputCount).fill(false));
+  }, []);
 
   const values = useMemo(() => {
     try {
@@ -76,23 +88,41 @@ export function App() {
     state.circuit.outputId !== null &&
     values.get(state.circuit.outputId) === state.puzzle.target;
 
+  /* Bank the score the moment it is achieved, not on some "submit" button. */
+  const bankedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!solved) return;
+    const stamp = `${state.puzzle.id}:${breakdown.total}`;
+    if (bankedFor.current === stamp) return;
+    bankedFor.current = stamp;
+    setProgress((p) => recordSolve(p, state.puzzle.id, breakdown.total));
+  }, [solved, state.puzzle.id, breakdown.total]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.altKey) return;
       const key = event.key.toLowerCase();
 
-      const action: Record<string, () => void> = {
-        n: () => setState(placeGate(state, 'NOT')),
-        a: () => setState(placeGate(state, 'AND')),
-        o: () => setState(placeGate(state, 'OR')),
-        m: () => setState(mergeSelection(state)),
-        enter: () => setState(setOutput(state)),
-        escape: () => setState(clearSelection(state)),
-        delete: () => setState(deleteSelected(state)),
-        backspace: () => setState(deleteSelected(state)),
+      if ((event.metaKey || event.ctrlKey) && key === 'z') {
+        event.preventDefault();
+        undo();
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) return;
+
+      const moves: Record<string, () => void> = {
+        n: () => apply((s) => placeGate(s, 'NOT')),
+        a: () => apply((s) => placeGate(s, 'AND')),
+        o: () => apply((s) => placeGate(s, 'OR')),
+        m: () => apply(mergeSelection),
+        enter: () => apply(setOutput),
+        delete: () => apply(deleteSelected),
+        backspace: () => apply(deleteSelected),
+        u: undo,
+        escape: () => setState(clearSelection),
       };
 
-      const run = action[key];
+      const run = moves[key];
       if (run) {
         event.preventDefault();
         run();
@@ -101,7 +131,11 @@ export function App() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state]);
+  }, [apply, undo]);
+
+  const best = progress[state.puzzle.id];
+  const upNext = nextPuzzle(state.puzzle.id);
+  const solvedCount = PUZZLES.filter((p) => progress[p.id] !== undefined).length;
 
   return (
     <div className="app">
@@ -111,13 +145,21 @@ export function App() {
           value={state.puzzle.id}
           onChange={(e) => startPuzzle(e.target.value)}
         >
-          {PUZZLES.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} · {p.inputCount} inputs · par {p.par}
-            </option>
-          ))}
+          {PUZZLES.map((p) => {
+            const record = progress[p.id];
+            return (
+              <option key={p.id} value={p.id}>
+                {record !== undefined ? '✓ ' : ''}
+                {p.name} · {p.inputCount} in · par {p.par}
+                {record !== undefined ? ` · best ${record}` : ''}
+              </option>
+            );
+          })}
         </select>
         <p className="hint">{state.puzzle.hint}</p>
+        <span className="tally">
+          {solvedCount}/{PUZZLES.length} solved
+        </span>
         <button className="ghost" onClick={() => startPuzzle(state.puzzle.id)}>
           Reset
         </button>
@@ -125,15 +167,26 @@ export function App() {
 
       <Toolbox
         chips={[...state.registry.values()]}
-        onPlaceGate={(kind) => setState(placeGate(state, kind))}
-        onPlaceChip={(chipId) => setState(placeChip(state, chipId))}
-        onTrash={() => setState(deleteSelected(state))}
+        onPlaceGate={(kind) => apply((s) => placeGate(s, kind))}
+        onPlaceChip={(chipId) => apply((s) => placeChip(s, chipId))}
+        onTrash={() => apply(deleteSelected)}
       />
 
       <main>
         {solved && (
           <div className="banner">
-            Solved in {breakdown.total} — par is {state.puzzle.par}.
+            <span>
+              Solved in <strong>{breakdown.total}</strong> · par {state.puzzle.par}
+              {best !== undefined && best < breakdown.total
+                ? ` · your best ${best}`
+                : ''}
+              {breakdown.total < state.puzzle.par ? ' · under par!' : ''}
+            </span>
+            {upNext && (
+              <button onClick={() => startPuzzle(upNext.id)}>
+                Next: {upNext.name} &rarr;
+              </button>
+            )}
           </div>
         )}
         <Board
@@ -143,11 +196,9 @@ export function App() {
           selection={state.selection}
           target={state.puzzle.target}
           probeRow={probeRow}
-          onToggle={(id) => setState(toggleSelect(state, id))}
+          onToggle={(id) => setState((s) => toggleSelect(s, id))}
           onFlipInput={(index) =>
-            setInputBits((bits) =>
-              bits.map((on, i) => (i === index ? !on : on)),
-            )
+            setInputBits((bits) => bits.map((on, i) => (i === index ? !on : on)))
           }
         />
         {state.message && <p className="message">{state.message}</p>}
@@ -162,7 +213,14 @@ export function App() {
             actual={actual}
             actualLabel={actualLabel}
             probeRow={probeRow}
-            onProbe={setProbeRow}
+            onProbe={(row) =>
+              setInputBits(
+                Array.from(
+                  { length: state.puzzle.inputCount },
+                  (_, i) => ((row >> i) & 1) === 1,
+                ),
+              )
+            }
           />
           <p className="caption">
             {state.selection.length === 1
@@ -182,20 +240,20 @@ export function App() {
               className={proposal.ok ? 'merge ready' : 'merge'}
               disabled={!proposal.ok}
               title={proposal.ok ? undefined : proposal.detail}
-              onClick={() => setState(mergeSelection(state))}
+              onClick={() => apply(mergeSelection)}
             >
               {proposal.ok
                 ? `Merge into ${proposal.candidate.name} ×${proposal.candidate.matches.length} · saves ${proposal.candidate.saved}`
                 : 'Merge'}
               <kbd>M</kbd>
             </button>
-            <button onClick={() => setState(setOutput(state))}>
+            <button onClick={() => apply(setOutput)}>
               Set as output <kbd>&crarr;</kbd>
             </button>
-            <button
-              className="ghost"
-              onClick={() => setState(clearSelection(state))}
-            >
+            <button disabled={past.length === 0} onClick={undo}>
+              Undo <kbd>U</kbd>
+            </button>
+            <button className="ghost" onClick={() => setState(clearSelection)}>
               Clear selection <kbd>Esc</kbd>
             </button>
           </div>
@@ -205,7 +263,12 @@ export function App() {
           )}
         </div>
 
-        <ScorePanel breakdown={breakdown} par={state.puzzle.par} solved={solved} />
+        <ScorePanel
+          breakdown={breakdown}
+          par={state.puzzle.par}
+          solved={solved}
+          best={best}
+        />
       </aside>
     </div>
   );

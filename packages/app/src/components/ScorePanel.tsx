@@ -4,6 +4,8 @@ interface ScorePanelProps {
   readonly breakdown: ScoreBreakdown;
   readonly par: number;
   readonly solved: boolean;
+  /** Best score recorded for this puzzle, if it has been solved before. */
+  readonly best?: number;
 }
 
 /**
@@ -13,7 +15,7 @@ interface ScorePanelProps {
  * what players optimize and argue about, so every point has to be traceable to
  * something on the board.
  */
-export function ScorePanel({ breakdown, par, solved }: ScorePanelProps) {
+export function ScorePanel({ breakdown, par, solved, best }: ScorePanelProps) {
   const verdict = !solved
     ? null
     : breakdown.total < par
@@ -73,6 +75,7 @@ export function ScorePanel({ breakdown, par, solved }: ScorePanelProps) {
 
       <div className="par">
         par <strong>{par}</strong>
+        {best !== undefined && <span className="best">best {best}</span>}
         {verdict && <span className={`verdict ${verdict.tone}`}>{verdict.text}</span>}
       </div>
     </div>
