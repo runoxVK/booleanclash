@@ -1,19 +1,27 @@
 import type { Circuit, NodeId } from '@logiclash/engine';
 
 /**
- * Automatic left-to-right layout.
+ * Automatic bottom-to-top layout.
+ *
+ * Signal flows upward: circuit inputs sit on the floor, each gate rises above
+ * whatever feeds it, and the output terminal docks at the ceiling. That is the
+ * orientation a breadboard-style schematic reads in, and it means depth in the
+ * graph maps directly to height on screen.
  *
  * Because gates are created by applying them to already-placed signals, the
- * graph is always a DAG flowing forward, so a simple layering by depth reads
- * well and the player never has to arrange anything. If free-form dragging
- * arrives later, this becomes the "tidy up" button rather than the only mode.
+ * graph is always a DAG flowing one way, so layering by depth is enough and the
+ * player never has to arrange anything.
  */
 
-export const NODE_W = 100;
-export const NODE_H = 46;
-const COL_GAP = 78;
-const ROW_GAP = 20;
-const PAD = 28;
+export const NODE_W = 86;
+export const NODE_H = 54;
+/** Room above the top layer for the output terminal. */
+export const CEILING = 78;
+
+const COL_GAP = 32;
+const ROW_GAP = 48;
+const PAD_X = 30;
+const PAD_BOTTOM = 30;
 
 export interface Placement {
   readonly x: number;
@@ -44,32 +52,34 @@ export function layout(circuit: Circuit): LayoutResult {
     return depth;
   };
 
-  const columns = new Map<number, NodeId[]>();
+  const layers = new Map<number, NodeId[]>();
   for (const id of order) {
     const depth = depthOf(id);
-    const column = columns.get(depth);
-    if (column) column.push(id);
-    else columns.set(depth, [id]);
+    const layer = layers.get(depth);
+    if (layer) layer.push(id);
+    else layers.set(depth, [id]);
   }
 
-  for (const column of columns.values()) {
-    column.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
+  for (const layer of layers.values()) {
+    layer.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
   }
 
-  const tallest = Math.max(1, ...[...columns.values()].map((c) => c.length));
-  const height = PAD * 2 + tallest * NODE_H + (tallest - 1) * ROW_GAP;
-  const columnCount = Math.max(1, ...[...columns.keys()].map((d) => d + 1));
-  const width = PAD * 2 + columnCount * NODE_W + (columnCount - 1) * COL_GAP;
+  const topDepth = Math.max(0, ...layers.keys());
+  const layerCount = topDepth + 1;
+  const widest = Math.max(1, ...[...layers.values()].map((l) => l.length));
+
+  const width = PAD_X * 2 + widest * NODE_W + (widest - 1) * COL_GAP;
+  const height =
+    CEILING + PAD_BOTTOM + layerCount * NODE_H + (layerCount - 1) * ROW_GAP;
 
   const positions = new Map<NodeId, Placement>();
-  for (const [depth, ids] of columns) {
-    const span = ids.length * NODE_H + (ids.length - 1) * ROW_GAP;
-    const top = (height - span) / 2;
+  for (const [depth, ids] of layers) {
+    const span = ids.length * NODE_W + (ids.length - 1) * COL_GAP;
+    const left = (width - span) / 2;
+    // Depth 0 sits on the floor; higher depths climb toward the ceiling.
+    const y = CEILING + (topDepth - depth) * (NODE_H + ROW_GAP);
     ids.forEach((id, i) => {
-      positions.set(id, {
-        x: PAD + depth * (NODE_W + COL_GAP),
-        y: top + i * (NODE_H + ROW_GAP),
-      });
+      positions.set(id, { x: left + i * (NODE_W + COL_GAP), y });
     });
   }
 

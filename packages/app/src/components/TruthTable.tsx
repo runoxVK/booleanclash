@@ -7,9 +7,9 @@ interface TruthTableProps {
   readonly actual: bigint | null;
   /** What `actual` refers to, for the column header. */
   readonly actualLabel: string;
-  /** Row currently being probed on the board. */
-  readonly probeRow: number | null;
-  readonly onProbe: (row: number | null) => void;
+  /** Row the input switches are currently set to. */
+  readonly probeRow: number;
+  readonly onProbe: (row: number) => void;
 }
 
 /**
@@ -17,9 +17,9 @@ interface TruthTableProps {
  *
  * Two jobs. First, the row-by-row diff is the main feedback channel: it says not
  * just that you are wrong but exactly which input combinations are wrong, which
- * is what makes the next move findable. Second, clicking a row probes it — the
- * board then shows real signal values for that combination instead of whole
- * truth tables, so you can watch one case flow through the circuit.
+ * is what makes the next move findable. Second, it mirrors the input switches —
+ * the highlighted row IS the switch positions, and clicking a row throws the
+ * switches to match, so you can jump straight to a case you are getting wrong.
  */
 export function TruthTable({
   inputCount,
@@ -57,11 +57,7 @@ export function TruthTable({
           if (probeRow === r) classes.push('probed');
 
           return (
-            <tr
-              key={r}
-              className={classes.join(' ')}
-              onClick={() => onProbe(probeRow === r ? null : r)}
-            >
+            <tr key={r} className={classes.join(' ')} onClick={() => onProbe(r)}>
               {names.map((n, i) => (
                 <td key={n} className="in">
                   {(r >> (inputCount - 1 - i)) & 1}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { evaluate, score, type NodeId } from '@logiclash/engine';
 import { Board } from './components/Board';
 import { ScorePanel } from './components/ScorePanel';
+import { Toolbox } from './components/Toolbox';
 import { TruthTable } from './components/TruthTable';
 import {
   clearSelection,
@@ -24,8 +25,31 @@ export function App() {
   const [state, setState] = useState<GameState>(() =>
     newGame(PUZZLES[OPENING_PUZZLE]),
   );
-  /** Which input combination the board is showing live signals for. */
-  const [probeRow, setProbeRow] = useState<number | null>(null);
+  /** Switch positions for each circuit input, driving the live signal values. */
+  const [inputBits, setInputBits] = useState<boolean[]>(() =>
+    new Array(PUZZLES[OPENING_PUZZLE].inputCount).fill(false),
+  );
+
+  /* Switch positions and truth-table row are the same thing seen two ways. */
+  const probeRow = inputBits.reduce(
+    (acc, on, i) => (on ? acc | (1 << i) : acc),
+    0,
+  );
+
+  const setProbeRow = (row: number) =>
+    setInputBits(
+      Array.from(
+        { length: state.puzzle.inputCount },
+        (_, i) => ((row >> i) & 1) === 1,
+      ),
+    );
+
+  const startPuzzle = (puzzleId: string) => {
+    const next = PUZZLES.find((p) => p.id === puzzleId);
+    if (!next) return;
+    setState(newGame(next));
+    setInputBits(new Array(next.inputCount).fill(false));
+  };
 
   const values = useMemo(() => {
     try {
@@ -52,7 +76,6 @@ export function App() {
     state.circuit.outputId !== null &&
     values.get(state.circuit.outputId) === state.puzzle.target;
 
-  /* Keyboard shortcuts. Speed matters once there is a clock. */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -80,21 +103,13 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [state]);
 
-  const chips = [...state.registry.values()];
-
   return (
     <div className="app">
       <header>
         <h1>Logiclash</h1>
         <select
           value={state.puzzle.id}
-          onChange={(e) => {
-            const next = PUZZLES.find((p) => p.id === e.target.value);
-            if (next) {
-              setState(newGame(next));
-              setProbeRow(null);
-            }
-          }}
+          onChange={(e) => startPuzzle(e.target.value)}
         >
           {PUZZLES.map((p) => (
             <option key={p.id} value={p.id}>
@@ -103,35 +118,17 @@ export function App() {
           ))}
         </select>
         <p className="hint">{state.puzzle.hint}</p>
-        <button className="ghost" onClick={() => setState(newGame(state.puzzle))}>
+        <button className="ghost" onClick={() => startPuzzle(state.puzzle.id)}>
           Reset
         </button>
       </header>
 
-      <aside className="left">
-        <div className="panel">
-          <h2>Target</h2>
-          <TruthTable
-            inputCount={state.puzzle.inputCount}
-            target={state.puzzle.target}
-            actual={actual}
-            actualLabel={actualLabel}
-            probeRow={probeRow}
-            onProbe={setProbeRow}
-          />
-          <p className="caption">
-            {state.selection.length === 1
-              ? 'Comparing the selected gate.'
-              : state.circuit.outputId !== null
-                ? 'Comparing the output gate.'
-                : 'Select a gate, or set one as the output.'}
-            <br />
-            {probeRow === null
-              ? 'Click a row to trace it through the board.'
-              : 'Tracing that row — click again to stop.'}
-          </p>
-        </div>
-      </aside>
+      <Toolbox
+        chips={[...state.registry.values()]}
+        onPlaceGate={(kind) => setState(placeGate(state, kind))}
+        onPlaceChip={(chipId) => setState(placeChip(state, chipId))}
+        onTrash={() => setState(deleteSelected(state))}
+      />
 
       <main>
         {solved && (
@@ -147,45 +144,39 @@ export function App() {
           target={state.puzzle.target}
           probeRow={probeRow}
           onToggle={(id) => setState(toggleSelect(state, id))}
+          onFlipInput={(index) =>
+            setInputBits((bits) =>
+              bits.map((on, i) => (i === index ? !on : on)),
+            )
+          }
         />
+        {state.message && <p className="message">{state.message}</p>}
       </main>
 
       <aside className="right">
         <div className="panel">
-          <h2>Build</h2>
+          <h2>Target</h2>
+          <TruthTable
+            inputCount={state.puzzle.inputCount}
+            target={state.puzzle.target}
+            actual={actual}
+            actualLabel={actualLabel}
+            probeRow={probeRow}
+            onProbe={setProbeRow}
+          />
           <p className="caption">
-            Click signals on the board, then apply a gate. Order matters.
+            {state.selection.length === 1
+              ? 'Comparing the selected part.'
+              : state.circuit.outputId !== null
+                ? 'Comparing the output.'
+                : 'Select a part, or set one as the output.'}
+            <br />
+            Clicking a row flips the switches to match it.
           </p>
-          <div className="buttons">
-            <button onClick={() => setState(placeGate(state, 'NOT'))}>
-              NOT <kbd>N</kbd>
-            </button>
-            <button onClick={() => setState(placeGate(state, 'AND'))}>
-              AND <kbd>A</kbd>
-            </button>
-            <button onClick={() => setState(placeGate(state, 'OR'))}>
-              OR <kbd>O</kbd>
-            </button>
-          </div>
+        </div>
 
-          {chips.length > 0 && (
-            <>
-              <h3>Your chips</h3>
-              <div className="buttons">
-                {chips.map((chip) => (
-                  <button
-                    key={chip.id}
-                    className="chip-btn"
-                    onClick={() => setState(placeChip(state, chip.id))}
-                  >
-                    {chip.name}
-                    <em>{chip.arity} pins</em>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
+        <div className="panel">
+          <h2>Actions</h2>
           <div className="buttons wide">
             <button
               className={proposal.ok ? 'merge ready' : 'merge'}
@@ -198,32 +189,23 @@ export function App() {
                 : 'Merge'}
               <kbd>M</kbd>
             </button>
+            <button onClick={() => setState(setOutput(state))}>
+              Set as output <kbd>&crarr;</kbd>
+            </button>
+            <button
+              className="ghost"
+              onClick={() => setState(clearSelection(state))}
+            >
+              Clear selection <kbd>Esc</kbd>
+            </button>
           </div>
 
           {!proposal.ok && state.selection.length > 0 && (
             <p className="why">{proposal.detail}</p>
           )}
-
-          <div className="buttons wide">
-            <button onClick={() => setState(setOutput(state))}>
-              Set as output <kbd>&crarr;</kbd>
-            </button>
-            <button onClick={() => setState(deleteSelected(state))}>
-              Delete <kbd>Del</kbd>
-            </button>
-            <button className="ghost" onClick={() => setState(clearSelection(state))}>
-              Clear selection <kbd>Esc</kbd>
-            </button>
-          </div>
-
-          {state.message && <p className="message">{state.message}</p>}
         </div>
 
-        <ScorePanel
-          breakdown={breakdown}
-          par={state.puzzle.par}
-          solved={solved}
-        />
+        <ScorePanel breakdown={breakdown} par={state.puzzle.par} solved={solved} />
       </aside>
     </div>
   );
