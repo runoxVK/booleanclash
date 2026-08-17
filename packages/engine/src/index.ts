@@ -12,3 +12,5 @@ export * from './tuning.js';
 export * from './truthtable.js';
 export * from './circuit.js';
 export * from './cost.js';
+export * from './codex.js';
+export * from './merge.js';

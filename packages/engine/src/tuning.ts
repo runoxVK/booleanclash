@@ -56,6 +56,16 @@ export const TUNING = {
   maxChipNodes: 8,
 
   /**
+   * Most parameters (input pins) a chip may have.
+   *
+   * This is a legibility constraint as much as a balance one: a chip with nine
+   * pins is unusable on a board, and an 8-node tree of ANDs would produce
+   * exactly that. Real useful chips are small — XOR is 2, MUX and full-adder
+   * are 3. Raising this past 5 mostly buys wide gates that flatten the puzzle.
+   */
+  maxChipArity: 4,
+
+  /**
    * How many times a pattern must appear before it can be merged.
    *
    * The rule the whole design rests on. Instances must have DIFFERENT input

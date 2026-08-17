@@ -99,6 +99,32 @@ Two properties worth not breaking, both locked in by tests in
 - Faking a second instance at the same binding to earn a merge **loses points**,
   independently of M3 rejecting it at merge time.
 
+## Merging
+
+`proposeMerge(circuit, selection, registry)` returns either a candidate or a
+typed rejection. The UI should surface `detail` verbatim when the merge button is
+dark — that explanation is most of how players learn the rule.
+
+| Rejection | Meaning |
+|---|---|
+| `empty-selection` | Nothing selected. |
+| `unknown-node` | Selection references a node not on the board. |
+| `contains-input` | Circuit inputs are pins, not gates. |
+| `contains-chip` | No nesting yet — the deferred "tiered chips" feature. |
+| `too-many-nodes` | Over `maxChipNodes`. |
+| `too-many-params` | Over `maxChipArity`. |
+| `multiple-outputs` | A chip needs exactly one output. |
+| `internal-fanout` | Something inside the selection feeds the outside, so it cannot be swapped for one chip. |
+| `not-enough-instances` | The shape does not appear often enough at *different* bindings. Carries `instances`. |
+
+Parameter numbering comes from a deterministic traversal, so identical shapes
+always produce the same pattern key. An external signal met twice maps to the
+same parameter, which makes `AND(x, x)` an arity-1 pattern rather than arity-2.
+
+Codex lookups are canonical under parameter permutation, so a pin-shuffled MUX is
+still recognized as a MUX. That is for *naming* only — chip identity stays exact,
+because pin order matters when wiring.
+
 Chip identity is **behavioural, not structural** — same arity + same truth table
 means same chip, however it was wired. That is what powers "you discovered XOR"
 and prevents hoarding variants.
@@ -110,7 +136,7 @@ and prevents hoarding variants.
 | M0 | Scaffold — **done** |
 | M1 | Truth tables + circuit model + evaluation — **done** |
 | M2 | `cost.ts` — scoring with itemized breakdown — **done** |
-| M3 | `merge.ts` — pattern matching, binding check, chip registry, codex |
+| M3 | `merge.ts` + `codex.ts` — pattern matching, binding check, chip creation — **done** |
 | M4 | `generate.ts` — puzzle curation, filtered for paradigm diversity |
 | M5 | `packages/app` — the editor UI |
 | M6 | Playtest and tune the four constants |
