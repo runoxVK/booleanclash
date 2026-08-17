@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    /* vite.config.ts runs under Node, so this project needs both sets of
+       globals. The engine deliberately gets neither DOM nor Node. */
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "paths": {
+      "@logiclash/engine": ["../engine/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

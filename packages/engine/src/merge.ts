@@ -85,7 +85,8 @@ export type MergeRejection =
   | 'multiple-outputs'
   | 'not-connected'
   | 'internal-fanout'
-  | 'not-enough-instances';
+  | 'not-enough-instances'
+  | 'no-saving';
 
 export interface MergeCandidate {
   readonly pattern: Pattern;
@@ -95,6 +96,8 @@ export interface MergeCandidate {
   readonly table: bigint;
   /** Primitive gates in the body — becomes the chip's definition cost. */
   readonly gateCost: number;
+  /** Points this merge will save. Always positive; otherwise it is rejected. */
+  readonly saved: number;
   /** Famous name if recognized, otherwise a generated tag. */
   readonly name: string;
   /** True when this is a function with a famous name. */
@@ -469,6 +472,25 @@ export function proposeMerge(
     );
   }
 
+  // A merge that does not pay for itself is a trap, not a choice. One AND gate
+  // used twice is a legal pattern, but wrapping it costs 1 + 1 pkg + 1 reuse = 3
+  // against 2 inline. Rejecting these here keeps the UI from ever offering a
+  // move that makes the score worse, and it puts the "chips start paying off at
+  // three gates" cliff in the rule rather than only in the arithmetic.
+  const gateCost = pattern.nodes.length;
+  const saved =
+    matches.length * gateCost -
+    (gateCost + TUNING.packagingFee + (matches.length - 1) * TUNING.reuseFee);
+
+  if (saved <= 0) {
+    return reject(
+      'no-saving',
+      `Too small to be worth it — a ${gateCost}-gate chip used ${matches.length} times ` +
+        `would ${saved === 0 ? 'break even' : `cost ${-saved} more`}. Find a bigger pattern.`,
+      matches.length,
+    );
+  }
+
   const table = patternTable(pattern);
   const known = identify(pattern.arity, table);
 
@@ -487,7 +509,8 @@ export function proposeMerge(
       matches,
       arity: pattern.arity,
       table,
-      gateCost: pattern.nodes.length,
+      gateCost,
+      saved,
       name: known ?? describeFunction(pattern.arity, table),
       known: known !== null,
       existingChipId,

@@ -36,7 +36,7 @@ CI runs `npm run check` on every push and pull request
 
 ```
 packages/engine/   All game rules. Zero dependencies. No rendering.
-packages/app/      (M5) Vite + React + @xyflow/react. Owns no rules.
+packages/app/      Vite + React + hand-rolled SVG board. Owns no rules.
 scripts/play.ts    Dev scratch pad.
 ```
 
@@ -137,9 +137,29 @@ and prevents hoarding variants.
 | M1 | Truth tables + circuit model + evaluation — **done** |
 | M2 | `cost.ts` — scoring with itemized breakdown — **done** |
 | M3 | `merge.ts` + `codex.ts` — pattern matching, binding check, chip creation — **done** |
+| M5 | `packages/app` — playable UI, hand-authored puzzles — **done** |
 | M4 | `generate.ts` — puzzle curation, filtered for paradigm diversity |
-| M5 | `packages/app` — the editor UI |
 | M6 | Playtest and tune the four constants |
+
+M4 and M5 are swapped deliberately: the merge economy cannot be judged from a
+test suite, so the UI came first. `packages/app/src/puzzles.ts` holds four
+hand-authored puzzles until the generator lands.
+
+## Playing it
+
+```bash
+npm run dev
+```
+
+Click signals on the board, then apply a gate — click `a`, click `b`, press
+<kbd>A</kbd> for AND. Keyboard: <kbd>N</kbd>/<kbd>A</kbd>/<kbd>O</kbd> place
+gates, <kbd>M</kbd> merges, <kbd>Enter</kbd> sets the output, <kbd>Esc</kbd>
+clears the selection.
+
+There is no wire dragging. Gates are applied to already-selected signals, so
+every gate is fully wired the moment it exists, the circuit is always valid, and
+layout can be automatic. It is also faster to play, which will matter once there
+is a clock. Free-form dragging can come back later if it turns out to be missed.
 
 Trace logging (every placement, in order) goes in from the first playable
 version — it is the anti-cheat signal *and* the replay feature, and it cannot be

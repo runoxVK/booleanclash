@@ -30,9 +30,10 @@ export const TUNING = {
    *
    * This is what stops spammy micro-merges. With a packaging fee of 1 and a
    * reuse fee of 1, merging a 2-gate pattern used twice costs 2+1+1=4 against
-   * 2*2=4 inline — exactly break-even, so tiny merges are pointless and the
-   * player has to find real structure. Raising this makes chips a bigger
-   * commitment; lowering it to 0 lets players merge everything cheaply.
+   * 2*2=4 inline — exactly break-even, and merges that fail to save anything are
+   * rejected outright, so the cliff sits at 3 gates and the player has to find
+   * real structure. Raising this makes chips a bigger commitment; lowering it to
+   * 0 lets players merge everything cheaply.
    */
   packagingFee: 1,
 

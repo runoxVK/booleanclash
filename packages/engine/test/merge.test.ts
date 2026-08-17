@@ -99,6 +99,29 @@ describe('the merge rule', () => {
     expect(proposal.instances).toBe(1);
   });
 
+  it('refuses a merge that would not pay for itself', () => {
+    // Two AND gates at different bindings is a legal pattern, but wrapping a
+    // single gate costs 1 + 1 pkg + 1 reuse = 3 against 2 inline. Offering this
+    // move would be inviting the player into a trap.
+    const { circuit } = twoXorsInPrimitives();
+    const anAnd = [...circuit.nodes.values()].find((n) => n.kind === 'AND');
+    expect(anAnd).toBeDefined();
+
+    const proposal = proposeMerge(circuit, [anAnd!.id]);
+    expect(proposal.ok).toBe(false);
+    if (proposal.ok) return;
+    expect(proposal.reason).toBe('no-saving');
+  });
+
+  it('reports the saving on an accepted merge', () => {
+    const { circuit, left } = twoXorsInPrimitives();
+    const proposal = proposeMerge(circuit, left.all);
+    expect(proposal.ok).toBe(true);
+    if (!proposal.ok) return;
+    // 2 x 4 inline = 8, against 4 + 1 pkg + 1 reuse = 6.
+    expect(proposal.candidate.saved).toBe(2);
+  });
+
   it('cannot swallow the whole solution, however hard you try', () => {
     // Selecting everything: the top-level answer is bound to the real inputs
     // exactly once, so it can never reach the instance threshold.
