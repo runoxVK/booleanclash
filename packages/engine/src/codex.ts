@@ -74,38 +74,57 @@ export function canonicalUnderPermutation(table: bigint, arity: number): bigint 
  * Tables follow the engine's row convention: bit `p` of the row index is the
  * value of parameter `p`, and row 0 is all-zeroes.
  */
-const KNOWN: ReadonlyArray<{ arity: number; table: bigint; name: string }> = [
-  // arity 1
-  { arity: 1, table: 0x1n, name: 'NOT' },
-  { arity: 1, table: 0x2n, name: 'BUFFER' },
+export interface Component {
+  readonly arity: number;
+  readonly table: bigint;
+  readonly name: string;
+  /** One line the player can read while hunting for it on the board. */
+  readonly blurb: string;
+}
 
-  // arity 2
-  { arity: 2, table: 0x0n, name: 'ALWAYS 0' },
-  { arity: 2, table: 0x1n, name: 'NOR' },
-  { arity: 2, table: 0x2n, name: 'ANDNOT' },
-  { arity: 2, table: 0x6n, name: 'XOR' },
-  { arity: 2, table: 0x7n, name: 'NAND' },
-  { arity: 2, table: 0x8n, name: 'AND' },
-  { arity: 2, table: 0x9n, name: 'XNOR' },
-  { arity: 2, table: 0xbn, name: 'IMPLIES' },
-  { arity: 2, table: 0xen, name: 'OR' },
-  { arity: 2, table: 0xfn, name: 'ALWAYS 1' },
+/**
+ * The catalogue of components worth packaging.
+ *
+ * This list IS the game's whitelist, and that is what keeps a player from
+ * collapsing their whole answer into a single chip: their answer is some
+ * arbitrary function, and arbitrary functions are not in here. The generator's
+ * side of that bargain is never handing out a target that appears in this list.
+ *
+ * Deliberately excluded: the primitives themselves (packaging a lone AND is not
+ * a discovery), constants, and anything that ignores one of its inputs.
+ */
+const KNOWN: readonly Component[] = [
+  // Two inputs
+  { arity: 2, table: 0x1n, name: 'NOR', blurb: 'On only when both inputs are off.' },
+  { arity: 2, table: 0x2n, name: 'ANDNOT', blurb: 'On when the first is on and the second is off.' },
+  { arity: 2, table: 0x6n, name: 'XOR', blurb: 'On when the inputs differ.' },
+  { arity: 2, table: 0x7n, name: 'NAND', blurb: 'Off only when both inputs are on.' },
+  { arity: 2, table: 0x9n, name: 'XNOR', blurb: 'On when the inputs match.' },
+  { arity: 2, table: 0xbn, name: 'IMPLIES', blurb: 'Off only when the first is on and the second off.' },
 
-  // arity 3
-  { arity: 3, table: 0x01n, name: 'NOR3' },
-  { arity: 3, table: 0x80n, name: 'AND3' },
-  { arity: 3, table: 0x7fn, name: 'NAND3' },
-  { arity: 3, table: 0xfen, name: 'OR3' },
-  { arity: 3, table: 0x96n, name: 'XOR3' },
-  { arity: 3, table: 0xe8n, name: 'MAJORITY' },
-  { arity: 3, table: 0xcan, name: 'MUX' },
+  // Three inputs
+  { arity: 3, table: 0x01n, name: 'NOR3', blurb: 'On only when all three are off.' },
+  { arity: 3, table: 0x80n, name: 'AND3', blurb: 'On only when all three are on.' },
+  { arity: 3, table: 0x7fn, name: 'NAND3', blurb: 'Off only when all three are on.' },
+  { arity: 3, table: 0xfen, name: 'OR3', blurb: 'On when any of the three is on.' },
+  { arity: 3, table: 0x96n, name: 'XOR3', blurb: 'On when an odd number are on.' },
+  { arity: 3, table: 0xe8n, name: 'MAJORITY', blurb: 'On when at least two of three are on.' },
+  { arity: 3, table: 0xcan, name: 'MUX', blurb: 'Passes one input or the other, chosen by the third.' },
 ];
+
+/** Everything the player can hunt for, for the reference panel. */
+export const COMPONENTS: readonly Component[] = KNOWN;
 
 const codex = new Map<string, string>();
 for (const entry of KNOWN) {
   const key = `${entry.arity}:${canonicalUnderPermutation(entry.table, entry.arity)}`;
   // First declaration wins, so earlier names are the preferred label.
   if (!codex.has(key)) codex.set(key, entry.name);
+}
+
+/** Is this function one the game will let you package? */
+export function isKnownComponent(arity: number, table: bigint): boolean {
+  return identify(arity, table) !== null;
 }
 
 /** The famous name for this function, or null if it is not a known one. */

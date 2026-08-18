@@ -222,17 +222,15 @@ export function mergeSelection(state: GameState): GameState {
   const outcome = applyMerge(state.circuit, proposal.candidate, state.registry);
   const { candidate } = proposal;
 
-  /* Each new chip takes the cell of the shape it replaced, so the board keeps
-     the arrangement the player built rather than jumping around. */
+  /* The chip takes the cell of the part that was the cluster's output, so the
+     board keeps the arrangement the player built rather than jumping around. */
   const cells = new Map(state.cells);
-  candidate.matches.forEach((match, i) => {
-    const home = state.cells.get(match.rootId);
-    for (const id of match.nodeIds) cells.delete(id);
-    const chipNode = outcome.placedNodeIds[i];
-    if (chipNode !== undefined) {
-      cells.set(chipNode, home ?? firstFreeCell(cells) ?? { col: 0, row: 0 });
-    }
-  });
+  const home = state.cells.get(candidate.nodeIds[0]);
+  for (const id of candidate.nodeIds) cells.delete(id);
+  cells.set(
+    outcome.placedNodeId,
+    home ?? firstFreeCell(cells) ?? { col: 0, row: 0 },
+  );
 
   return {
     ...state,
@@ -241,6 +239,6 @@ export function mergeSelection(state: GameState): GameState {
     cells,
     selection: [],
     armed: null,
-    message: `Discovered ${outcome.chip.name}. Saved ${candidate.saved}.`,
+    message: `That was a ${outcome.chip.name}. ${candidate.nodeIds.length} parts became 1.`,
   };
 }

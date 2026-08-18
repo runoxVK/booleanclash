@@ -55,9 +55,9 @@ describe('dead branches are free', () => {
   });
 });
 
-describe('the payoff case: one chip, two bindings', () => {
-  /** XOR(a,b) OR XOR(c,d) — the shape that justifies merging at all. */
-  function twoXors() {
+describe('chips count as one unit', () => {
+  /** XOR(a,b) OR XOR(c,d) with both XORs already packaged. */
+  function twoChips() {
     const b = new CircuitBuilder(4);
     const ins = [b.input(0), b.input(1), b.input(2), b.input(3)];
     b.setOutput(
@@ -66,103 +66,38 @@ describe('the payoff case: one chip, two bindings', () => {
     return b.build();
   }
 
-  it('itemizes the charge', () => {
-    const result = score(twoXors(), registry);
+  it('itemizes what each chip contributed', () => {
+    const result = score(twoChips(), registry);
 
     expect(result.chips).toHaveLength(1);
     const charge = result.chips[0];
     expect(charge.name).toBe('XOR');
     expect(charge.instances).toBe(2);
-    expect(charge.definitionCost).toBe(4);
-    expect(charge.packagingFee).toBe(1);
-    expect(charge.reuseFees).toBe(1);
-    expect(charge.subtotal).toBe(6); // 4 + 1 + 1
-    expect(charge.inlineCost).toBe(8); // 4 + 4 by hand
-    expect(charge.saved).toBe(2);
-    expect(charge.wasteful).toBe(false);
+    expect(charge.partsInside).toBe(4);
+    expect(charge.subtotal).toBe(2); // one unit each
+    expect(charge.inlineCost).toBe(8); // eight loose parts
+    expect(charge.saved).toBe(6);
   });
 
-  it('beats building both XORs by hand', () => {
-    const circuit = twoXors();
-    expect(totalScore(circuit, registry)).toBe(7); // 1 OR + 6
-    expect(inlineScore(circuit, registry)).toBe(9); // 1 OR + 8
-    expect(score(circuit, registry).totalSaved).toBe(2);
+  it('scores three where loose parts would score nine', () => {
+    const circuit = twoChips();
+    expect(totalScore(circuit, registry)).toBe(3); // 1 OR + 2 chips
+    expect(inlineScore(circuit, registry)).toBe(9); // 1 OR + 8 parts
+    expect(score(circuit, registry).totalSaved).toBe(6);
   });
 
-  it('pays off harder the more times the chip is reused', () => {
-    const b = new CircuitBuilder(4);
-    const ins = [b.input(0), b.input(1), b.input(2), b.input(3)];
-    const three = [
-      b.chip(XOR.id, [ins[0], ins[1]]),
-      b.chip(XOR.id, [ins[2], ins[3]]),
-      b.chip(XOR.id, [ins[0], ins[3]]),
-    ];
-    b.setOutput(b.or(b.or(three[0], three[1]), three[2]));
+  it('charges the same for a chip however much is inside it', () => {
+    // A chip is one unit whether it packaged three parts or eight. That is the
+    // entire economy: recognising the component is the win.
+    const big: ChipDefinition = {
+      id: 'chip-big', name: 'MAJORITY', arity: 3, table: 0xe8n, gateCost: 8,
+    };
+    const reg = new Map([[big.id, big]]);
+    const b = new CircuitBuilder(3);
+    const ins = [b.input(0), b.input(1), b.input(2)];
+    b.setOutput(b.chip(big.id, ins));
 
-    const charge = score(b.build(), registry).chips[0];
-    expect(charge.subtotal).toBe(7); // 4 + 1 + 2
-    expect(charge.inlineCost).toBe(12);
-    expect(charge.saved).toBe(5);
-  });
-});
-
-describe('design invariants', () => {
-  it('makes micro-merges pointless: a 2-gate chip used twice breaks even', () => {
-    // This is what the packaging fee is FOR. If this ever starts saving points,
-    // players will merge every trivial pair and the board becomes noise.
-    const tiny = chip('TINY', 2, 0x8n, 2);
-    const reg = new Map([[tiny.id, tiny]]);
-
-    const b = new CircuitBuilder(4);
-    const ins = [b.input(0), b.input(1), b.input(2), b.input(3)];
-    b.setOutput(
-      b.or(b.chip(tiny.id, [ins[0], ins[1]]), b.chip(tiny.id, [ins[2], ins[3]])),
-    );
-
-    expect(score(b.build(), reg).chips[0].saved).toBe(0);
-  });
-
-  it('starts paying off at 3 gates — that is where the cliff sits', () => {
-    const small = chip('SMALL', 2, 0xen, 3);
-    const reg = new Map([[small.id, small]]);
-
-    const b = new CircuitBuilder(4);
-    const ins = [b.input(0), b.input(1), b.input(2), b.input(3)];
-    b.setOutput(
-      b.or(
-        b.chip(small.id, [ins[0], ins[1]]),
-        b.chip(small.id, [ins[2], ins[3]]),
-      ),
-    );
-
-    expect(score(b.build(), reg).chips[0].saved).toBe(1);
-  });
-
-  it('punishes faking a second instance to earn a merge', () => {
-    // The obvious cheese: instantiate the same function at the SAME binding
-    // twice so it looks reused, then merge. M3 rejects this at merge time
-    // (bindings must differ), but the cost model already makes it a loss, which
-    // is the belt-and-braces we want.
-    const b = new CircuitBuilder(2);
-    const a0 = b.input(0);
-    const a1 = b.input(1);
-    b.setOutput(b.and(b.chip(XOR.id, [a0, a1]), b.chip(XOR.id, [a0, a1])));
-
-    expect(totalScore(b.build(), registry)).toBe(7); // 6 + 1 AND
-    // Against just building XOR once, inline, for 4. Cheese loses.
-    expect(totalScore(b.build(), registry)).toBeGreaterThan(4);
-  });
-
-  it('flags a chip that has been reduced to a single use', () => {
-    // Legal merge, then the player deleted instances until one was left. They
-    // are now paying a packaging fee for nothing.
-    const b = new CircuitBuilder(2);
-    b.setOutput(b.chip(XOR.id, [b.input(0), b.input(1)]));
-
-    const charge = score(b.build(), registry).chips[0];
-    expect(charge.subtotal).toBe(5); // 4 + 1 + 0
-    expect(charge.saved).toBe(-1);
-    expect(charge.wasteful).toBe(true);
+    expect(totalScore(b.build(), reg)).toBe(1);
   });
 });
 
@@ -184,10 +119,9 @@ describe('tuning', () => {
   it('keeps every cost an integer, because players compare scores', () => {
     const values = [
       ...Object.values(TUNING.gateCost),
-      TUNING.packagingFee,
-      TUNING.reuseFee,
+      TUNING.chipCost,
       TUNING.maxChipNodes,
-      TUNING.minChipInstances,
+      TUNING.maxChipArity,
     ];
     for (const value of values) {
       expect(Number.isInteger(value)).toBe(true);

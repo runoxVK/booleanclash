@@ -15,17 +15,13 @@ import {
  * every point came from. That is why this returns an itemized breakdown rather
  * than a bare number: the UI renders the line items directly.
  *
- * The formula, for the live part of the circuit only:
- *
- *   score = sum of primitive gate costs
- *         + for each distinct chip used:
- *             its gate cost            (you still pay to build it once)
- *           + the packaging fee        (once, for crystallizing it)
- *           + reuse fee * (uses - 1)   (each extra instance is cheap)
+ * The score is simply how many units are wired into the answer. A loose gate is
+ * one unit and so is a chip, however many parts went into building it — which is
+ * what makes recognising a component worth doing.
  *
  * Dead branches cost nothing, so experimenting is free. Chips sitting in the
- * registry unused cost nothing either — you are only charged for what is wired
- * into the answer.
+ * registry unused cost nothing either; you are only charged for what reaches the
+ * output.
  */
 
 /** What one chip contributed to the score. One row in the UI's score panel. */
@@ -34,28 +30,14 @@ export interface ChipCharge {
   readonly name: string;
   /** How many live instances of this chip are on the board. */
   readonly instances: number;
-  /** Gate cost of the chip's body — paid once. */
-  readonly definitionCost: number;
-  /** The one-off crystallization charge. */
-  readonly packagingFee: number;
-  /** Total charged for instances after the first. */
-  readonly reuseFees: number;
-  /** definitionCost + packagingFee + reuseFees */
+  /** How many parts went into the component when it was packaged. */
+  readonly partsInside: number;
+  /** What these instances cost now — one unit each. */
   readonly subtotal: number;
-  /** What these instances would have cost built out by hand every time. */
+  /** What the same instances would cost spelled out in loose parts. */
   readonly inlineCost: number;
-  /**
-   * inlineCost - subtotal. The number worth showing prominently in the UI:
-   * it is the payoff for having spotted the pattern. Negative means the merge
-   * is currently costing the player (see `wasteful`).
-   */
+  /** inlineCost - subtotal: the payoff for having spotted the component. */
   readonly saved: number;
-  /**
-   * True when this chip is a net loss — almost always because the player merged
-   * legally and then deleted instances until only one was left. The UI should
-   * nudge them to unmerge rather than silently charging them.
-   */
-  readonly wasteful: boolean;
 }
 
 export interface ScoreBreakdown {
@@ -117,24 +99,17 @@ export function score(
       throw new CircuitError(`Circuit uses unknown chip "${chipId}"`);
     }
 
-    const definitionCost = chip.gateCost;
-    const packagingFee = TUNING.packagingFee;
-    const reuseFees = (instances - 1) * TUNING.reuseFee;
-    const subtotal = definitionCost + packagingFee + reuseFees;
+    const subtotal = instances * TUNING.chipCost;
     const inlineCost = instances * chip.gateCost;
-    const saved = inlineCost - subtotal;
 
     chips.push({
       chipId,
       name: chip.name,
       instances,
-      definitionCost,
-      packagingFee,
-      reuseFees,
+      partsInside: chip.gateCost,
       subtotal,
       inlineCost,
-      saved,
-      wasteful: saved < 0,
+      saved: inlineCost - subtotal,
     });
   }
 

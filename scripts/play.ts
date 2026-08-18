@@ -61,11 +61,10 @@ function panel(
   for (const c of s.chips) {
     console.log(
       pad(`  ${c.name} x${c.instances}`) +
-        `${c.subtotal}   (${c.definitionCost} + ${c.packagingFee} pkg + ${c.reuseFees} reuse)`,
+        `${c.subtotal}   (${c.partsInside} parts inside, counts as 1)`,
     );
     console.log(
-      ' '.repeat(32) + `      inline ${c.inlineCost}, saved ${c.saved}` +
-        (c.wasteful ? '  <-- WASTEFUL' : ''),
+      ' '.repeat(32) + `      loose ${c.inlineCost}, saved ${c.saved}`,
     );
   }
   console.log('  ' + '-'.repeat(30));
@@ -94,10 +93,11 @@ if (!proposal.ok) {
 } else {
   const c = proposal.candidate;
   console.log(`  ALLOWED`);
-  console.log(`  discovered   ${c.name}${c.known ? '  <-- a famous one!' : ''}`);
+  console.log(`  discovered   ${c.name}`);
   console.log(`  pins         ${c.arity}`);
-  console.log(`  body cost    ${c.gateCost} gates`);
-  console.log(`  instances    ${c.matches.length} (bindings differ)\n`);
+  console.log(`  parts inside ${c.nodeIds.length}`);
+  console.log(`  saves        ${c.saved}
+`);
 
   const outcome = applyMerge(start.circuit, c, registry);
   registry = outcome.registry;

@@ -30,7 +30,7 @@ export function coach(
       text:
         total <= par
           ? `Solved in ${total} — par is ${par}. Take the next puzzle, or keep trimming.`
-          : `Solved in ${total}, but par is ${par}. Fewer parts is always possible.`,
+          : `Solved in ${total}, but par is ${par}. Look for a component hiding in your circuit.`,
       tone: 'win',
     };
   }
@@ -64,9 +64,15 @@ export function coach(
     };
   }
 
-  if (selection.length > 0) {
+  if (selection.length > 1) {
     return {
-      text: `${selection.length} selected. Merge needs a whole repeated shape — or press Esc to clear.`,
+      text: `${selection.length} selected. If they add up to a component from the catalogue, press M to package them into one.`,
+      tone: 'do',
+    };
+  }
+  if (selection.length === 1) {
+    return {
+      text: 'One part selected. Add the rest of the cluster you think forms a component, then press M.',
       tone: 'do',
     };
   }
@@ -79,7 +85,7 @@ export function coach(
   }
 
   return {
-    text: `${total} parts used, par is ${par}. Click parts to select a shape you think repeats.`,
+    text: `${total} units used, par is ${par}. Spot a component in there and you can package it into one.`,
     tone: 'do',
   };
 }

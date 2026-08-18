@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { evaluate, score, type NodeId } from '@logiclash/engine';
 import { coach, describeGoal } from './coach';
 import { Board } from './components/Board';
+import { Catalogue } from './components/Catalogue';
 import { HowToPlay } from './components/HowToPlay';
 import { ScorePanel } from './components/ScorePanel';
 import { Toolbox } from './components/Toolbox';
@@ -281,6 +282,8 @@ export function App() {
           best={best}
         />
 
+        <Catalogue registry={state.registry} />
+
         <div className="panel">
           <h2>Target</h2>
           <TruthTable
@@ -316,7 +319,7 @@ export function App() {
               disabled={state.selection.length === 0}
               onClick={() => apply(mergeSelection)}
             >
-              Merge selection
+              Package as component
               <kbd>M</kbd>
             </button>
             <button onClick={() => apply(setOutput)}>

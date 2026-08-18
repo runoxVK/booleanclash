@@ -1,5 +1,5 @@
 import { CircuitBuilder, evaluateOutput } from './circuit.js';
-import { identify } from './codex.js';
+import { identify, isKnownComponent } from './codex.js';
 import { score } from './cost.js';
 import { makeRng, randInt, type Rng } from './random.js';
 import { costlyFunctions, density, recipes } from './synthesis.js';
@@ -276,12 +276,12 @@ export function generatePuzzle(seed: number, inputCount = 4): GeneratedPuzzle {
     );
     if (candidates.length === 0) continue;
 
-    /* Most three-parameter functions are anonymous, so left to chance the codex
-       almost never fires and nobody ever "discovers MUX". Lean toward the famous
-       ones often enough that recognition stays part of the game. */
+    /* The planted motif must be a component from the catalogue, because that is
+       the only thing a player is allowed to package. Planting an anonymous
+       function would make a puzzle with no discovery in it at all. */
     const named = candidates.filter((f) => identify(motifArity, f.table) !== null);
-    const pool = named.length > 0 && rng() < 0.4 ? named : candidates;
-    const chosen = pool[randInt(rng, pool.length)];
+    if (named.length === 0) continue;
+    const chosen = named[randInt(rng, named.length)];
     const motif = motifForFunction(chosen.table, motifArity);
     const motifSolution = motifCircuit(motif);
     const motifTable = evaluateOutput(motifSolution);
@@ -329,6 +329,11 @@ export function generatePuzzle(seed: number, inputCount = 4): GeneratedPuzzle {
        is reasonably mixed. */
     const balance = density(target, inputCount);
     if (balance < 0.25 || balance > 0.75) continue;
+
+    /* The generator's half of the bargain that keeps the catalogue honest: if
+       the target were itself a known component, the player could package their
+       entire answer and score 1. */
+    if (isKnownComponent(inputCount, target)) continue;
 
     const chipped = realize(plan, inputCount, chip);
     if (evaluateOutput(chipped, registry) !== target) continue; // paranoia

@@ -26,26 +26,15 @@ export const TUNING = {
   },
 
   /**
-   * One-off charge for crystallizing a chip, on top of its gate cost.
+   * What one placed chip counts for, however many parts went into it.
    *
-   * This is what stops spammy micro-merges. With a packaging fee of 1 and a
-   * reuse fee of 1, merging a 2-gate pattern used twice costs 2+1+1=4 against
-   * 2*2=4 inline — exactly break-even, and merges that fail to save anything are
-   * rejected outright, so the cliff sits at 3 gates and the player has to find
-   * real structure. Raising this makes chips a bigger commitment; lowering it to
-   * 0 lets players merge everything cheaply.
+   * This is the whole economy: the score is a count of units on the board, and
+   * packaging a recognised component turns several units into one. Raising it
+   * above 1 would make chips a trade-off rather than a straight win; at 1 the
+   * only question is whether you can SPOT the component, which is the intended
+   * skill.
    */
-  packagingFee: 1,
-
-  /**
-   * Cost of each chip instance after the first.
-   *
-   * The main dial on how dramatic the payoff feels. At 1, a 4-gate chip used
-   * twice saves 2 — noticeable. Raising it toward the chip's real gate cost
-   * makes chips nearly worthless; dropping it to 0 makes big chips explosively
-   * strong and pushes the meta toward hunting one giant repeated blob.
-   */
-  reuseFee: 1,
+  chipCost: 1,
 
   /**
    * Largest subcircuit that may become a chip, in nodes.
@@ -66,18 +55,6 @@ export const TUNING = {
    */
   maxChipArity: 4,
 
-  /**
-   * How many times a pattern must appear before it can be merged.
-   *
-   * The rule the whole design rests on. Instances must have DIFFERENT input
-   * bindings — free wire fan-out already covers reusing the same signal, so
-   * chips exist for applying the same function to different signals. Because the
-   * top-level solution is bound to the real inputs exactly once, it can never
-   * reach this threshold, which is why "merge the whole answer into one chip" is
-   * impossible without any whitelist. Raising this to 3 makes chips rare and
-   * precious.
-   */
-  minChipInstances: 2,
 } as const;
 
 export type Tuning = typeof TUNING;

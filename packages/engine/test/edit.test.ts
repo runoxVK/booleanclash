@@ -138,10 +138,13 @@ describe('removing parts', () => {
 describe('merging a half-wired selection', () => {
   it('is refused until every pin is filled', () => {
     const { circuit, ins } = board(4);
-    const g = addGate(circuit, 'AND');
-    const wired = connect(g.circuit, g.id, 0, ins[0]);
+    const inner = addGate(circuit, 'AND');
+    const outer = addGate(inner.circuit, 'NOT');
+    let c = connect(outer.circuit, inner.id, 0, ins[0]);
+    c = connect(c, outer.id, 0, inner.id);
+    // inner's second pin is still empty.
 
-    const proposal = proposeMerge(wired, [g.id]);
+    const proposal = proposeMerge(c, [inner.id, outer.id]);
     expect(proposal.ok).toBe(false);
     if (!proposal.ok) expect(proposal.reason).toBe('incomplete');
   });

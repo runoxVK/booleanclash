@@ -887,3 +887,51 @@ button.part-card.armed .card-part .pin {
 button.part-card.armed .card-part .name {
   fill: var(--sel);
 }
+
+/* ---------------------------------------------------------------- */
+/* Component catalogue                                              */
+/* ---------------------------------------------------------------- */
+
+.catalogue-note {
+  margin: 0 0 9px;
+}
+.catalogue-note kbd {
+  margin-left: 0;
+}
+
+ul.catalogue {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.catalogue li {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 0;
+  font-size: 11.5px;
+  cursor: help;
+}
+
+ul.catalogue .cname {
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  color: var(--dim);
+}
+ul.catalogue .cpins {
+  font-size: 9.5px;
+  color: var(--faint);
+}
+ul.catalogue .ctick {
+  color: var(--on);
+  font-weight: 700;
+}
+
+/* Found ones stand out, so the panel doubles as a collection to fill in. */
+ul.catalogue li.found .cname {
+  color: var(--chip);
+}

@@ -42,18 +42,11 @@ export function ScorePanel({ breakdown, par, solved, best }: ScorePanelProps) {
           <div key={chip.chipId} className="ledger-row chip-row">
             <span>
               {chip.name} &times;{chip.instances}
-              <em>
-                {chip.definitionCost} + {chip.packagingFee} pkg
-                {chip.reuseFees > 0 ? ` + ${chip.reuseFees} reuse` : ''}
-              </em>
+              <em>{chip.partsInside} parts inside, counts as 1</em>
             </span>
             <span>
               {chip.subtotal}
-              {chip.saved !== 0 && (
-                <em className={chip.wasteful ? 'bad' : 'good'}>
-                  {chip.wasteful ? `${chip.saved}` : `saved ${chip.saved}`}
-                </em>
-              )}
+              {chip.saved > 0 && <em className="good">saved {chip.saved}</em>}
             </span>
           </div>
         ))}

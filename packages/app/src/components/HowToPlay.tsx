@@ -35,11 +35,21 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             solved.
           </li>
           <li>
-            <strong>Merging is how you get under par.</strong> If you spot the
-            same shape built twice on <em>different</em> signals, select those
-            parts and press <kbd>M</kbd>. It becomes one reusable chip that costs
-            1 to place again instead of rebuilding the whole shape.
-            <em> Finding the repeat is the game — nothing will point it out.</em>
+            <strong>Packaging is how you get under par.</strong> Your score is
+            simply how many units are wired up, and a chip is one unit however
+            many gates went into it. If a cluster on your board adds up to a
+            component from the <strong>Components</strong> list — a XOR, a NAND,
+            a MUX — select those parts and press <kbd>M</kbd>. They collapse
+            into one, and the component joins your toolbox to place again.
+            <em>
+              {' '}
+              Recognising it is the game — nothing will point it out for you.
+            </em>
+          </li>
+          <li>
+            <strong>You cannot package everything.</strong> Only functions in the
+            catalogue can be packaged, and your final answer is not one of them,
+            so there is no collapsing the whole circuit into a single chip.
           </li>
         </ol>
         <p className="keys">
