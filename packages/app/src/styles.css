@@ -945,3 +945,16 @@ svg.board,
   -webkit-user-select: none;
   touch-action: none;
 }
+
+/* The selection itself confirms it forms a component, so the answer is on the
+   board where you are looking rather than only in a button off to the side. */
+.part.selected.packages .body {
+  stroke: var(--on);
+  fill: #eaf8ef;
+}
+.part.selected.packages .pin {
+  stroke: var(--on);
+}
+.part.selected.packages .order rect {
+  fill: var(--on);
+}

@@ -10,6 +10,7 @@ import { TruthTable } from './components/TruthTable';
 import {
   arm,
   clearSelection,
+  currentProposal,
   deleteSelected,
   dockOutput,
   mergeSelection,
@@ -101,6 +102,11 @@ export function App() {
     () => score(state.circuit, state.registry),
     [state.circuit, state.registry],
   );
+
+  /* Whether the CURRENT SELECTION is a component. Note this only ever answers a
+     question the player asked by selecting something — it never scans the board
+     for clusters they have not noticed. */
+  const proposal = useMemo(() => currentProposal(state), [state]);
 
   const focusId: NodeId | null =
     state.selection.length === 1 ? state.selection[0] : state.circuit.outputId;
@@ -259,6 +265,7 @@ export function App() {
           cells={state.cells}
           selection={state.selection}
           armed={state.armed}
+          selectionPackages={proposal.ok}
           target={state.puzzle.target}
           probeRow={probeRow}
           onSelect={(id) => setState((s) => toggleSelect(s, id))}
@@ -282,7 +289,35 @@ export function App() {
           best={best}
         />
 
-        <Catalogue registry={state.registry} />
+        <div className="panel">
+          <h2>Actions</h2>
+          <div className="buttons wide">
+            <button
+              className={proposal.ok ? 'merge ready' : 'merge'}
+              disabled={!proposal.ok}
+              onClick={() => apply(mergeSelection)}
+            >
+              {proposal.ok
+                ? `Package as ${proposal.candidate.name} · ${proposal.candidate.nodeIds.length} → 1`
+                : 'Package as component'}
+              <kbd>M</kbd>
+            </button>
+            <button onClick={() => apply(setOutput)}>
+              Set as output <kbd>&crarr;</kbd>
+            </button>
+            <button disabled={past.length === 0} onClick={undo}>
+              Undo <kbd>U</kbd>
+            </button>
+            <button className="ghost" onClick={() => setState(clearSelection)}>
+              Clear <kbd>Esc</kbd>
+            </button>
+          </div>
+
+          {!proposal.ok && state.selection.length > 0 && (
+            <p className="why">{proposal.detail}</p>
+          )}
+        </div>
+
 
         <div className="panel">
           <h2>Target</h2>
@@ -308,31 +343,7 @@ export function App() {
           </p>
         </div>
 
-        <div className="panel">
-          <h2>Actions</h2>
-          <div className="buttons wide">
-            {/* Deliberately never previews whether the selection is mergeable.
-                A button that lit up on a valid shape would be an oracle you
-                could brute-force against, and finding the repeat is the game. */}
-            <button
-              className="merge"
-              disabled={state.selection.length === 0}
-              onClick={() => apply(mergeSelection)}
-            >
-              Package as component
-              <kbd>M</kbd>
-            </button>
-            <button onClick={() => apply(setOutput)}>
-              Set as output <kbd>&crarr;</kbd>
-            </button>
-            <button disabled={past.length === 0} onClick={undo}>
-              Undo <kbd>U</kbd>
-            </button>
-            <button className="ghost" onClick={() => setState(clearSelection)}>
-              Clear <kbd>Esc</kbd>
-            </button>
-          </div>
-        </div>
+        <Catalogue registry={state.registry} />
       </aside>
     </div>
   );

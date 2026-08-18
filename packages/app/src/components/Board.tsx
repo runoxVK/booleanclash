@@ -40,6 +40,8 @@ interface BoardProps {
   readonly cells: CellMap;
   readonly selection: readonly NodeId[];
   readonly armed: Tool | null;
+  /** True when the current selection adds up to a component. */
+  readonly selectionPackages: boolean;
   readonly target: bigint;
   readonly probeRow: number;
   readonly onSelect: (id: NodeId) => void;
@@ -100,6 +102,7 @@ export function Board({
   cells,
   selection,
   armed,
+  selectionPackages,
   target,
   probeRow,
   onSelect,
@@ -360,6 +363,7 @@ export function Board({
 
           const classes = ['part', `kind-${node.kind.toLowerCase()}`];
           if (order !== undefined) classes.push('selected');
+          if (order !== undefined && selectionPackages) classes.push('packages');
           if (value !== undefined && value === target) classes.push('matches');
           if (circuit.outputId === node.id) classes.push('is-output');
           if (bit === 1) classes.push('hot');

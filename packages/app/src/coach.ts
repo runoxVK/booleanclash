@@ -66,7 +66,7 @@ export function coach(
 
   if (selection.length > 1) {
     return {
-      text: `${selection.length} selected. If they add up to a component from the catalogue, press M to package them into one.`,
+      text: `${selection.length} selected — they turn green when they add up to a component. Press M to package them.`,
       tone: 'do',
     };
   }
