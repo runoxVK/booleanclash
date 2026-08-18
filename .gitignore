@@ -8,3 +8,6 @@ shots/
 # server database
 logiclash.db
 logiclash.db-*
+*.db
+*.db-shm
+*.db-wal

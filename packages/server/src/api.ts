@@ -44,7 +44,7 @@ export interface Context {
   readonly player: PlayerRow | null;
 }
 
-function requirePlayer(ctx: Context): PlayerRow {
+export function requirePlayer(ctx: Context): PlayerRow {
   if (!ctx.player) throw new ApiError(401, 'Sign in first.');
   return ctx.player;
 }
@@ -263,20 +263,33 @@ export function postMove(ctx: Context, gameId: string, body: unknown) {
   return viewGame(ctx.db, updated);
 }
 
+/** Move rating between two players by id. Shared with races. */
+export function applyRating(
+  db: DatabaseSync,
+  player0: string,
+  player1: string,
+  scoreForP0: number,
+): void {
+  const p0 = playerById(db, player0);
+  const p1 = playerById(db, player1);
+  if (!p0 || !p1) return;
+
+  const next = updateRatings(p0.rating, p1.rating, scoreForP0);
+  setRating(db, p0.id, next.a);
+  setRating(db, p1.id, next.b);
+}
+
 function settleRatings(
   db: DatabaseSync,
   game: GameRow,
   result: { kind: string; winner?: number },
 ): void {
-  const p0 = playerById(db, game.player0);
-  const p1 = playerById(db, game.player1);
-  if (!p0 || !p1) return;
-
-  const scoreForP0 =
-    result.kind === 'draw' ? 0.5 : result.winner === 0 ? 1 : 0;
-  const next = updateRatings(p0.rating, p1.rating, scoreForP0);
-  setRating(db, p0.id, next.a);
-  setRating(db, p1.id, next.b);
+  applyRating(
+    db,
+    game.player0,
+    game.player1,
+    result.kind === 'draw' ? 0.5 : result.winner === 0 ? 1 : 0,
+  );
 }
 
 export { playerByToken };

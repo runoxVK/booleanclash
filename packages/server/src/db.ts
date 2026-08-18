@@ -77,6 +77,44 @@ export function openDatabase(file: string): DatabaseSync {
       game_id      TEXT REFERENCES games(id)
     );
 
+    /* Races are a different game from duels: separate boards, a shared clock,
+       and no turn order. Their own table rather than nullable columns bolted
+       onto games. */
+    CREATE TABLE IF NOT EXISTS races (
+      id            TEXT PRIMARY KEY,
+      player0       TEXT NOT NULL REFERENCES players(id),
+      player1       TEXT NOT NULL REFERENCES players(id),
+      input_count   INTEGER NOT NULL,
+      target        TEXT NOT NULL,
+      par           INTEGER NOT NULL,
+      time_limit_ms INTEGER NOT NULL,
+      started_at    INTEGER NOT NULL,
+      circuit0      TEXT,
+      score0        INTEGER,
+      solved0_at    INTEGER,
+      close0        INTEGER NOT NULL DEFAULT 0,
+      circuit1      TEXT,
+      score1        INTEGER,
+      solved1_at    INTEGER,
+      close1        INTEGER NOT NULL DEFAULT 0,
+      result        TEXT,
+      created_at    INTEGER NOT NULL,
+      updated_at    INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS race_seeks (
+      id            TEXT PRIMARY KEY,
+      player_id     TEXT NOT NULL REFERENCES players(id),
+      input_count   INTEGER NOT NULL,
+      time_limit_ms INTEGER NOT NULL,
+      created_at    INTEGER NOT NULL,
+      race_id       TEXT REFERENCES races(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS races_player0 ON races(player0);
+    CREATE INDEX IF NOT EXISTS races_player1 ON races(player1);
+    CREATE INDEX IF NOT EXISTS race_seeks_open ON race_seeks(race_id);
+
     CREATE INDEX IF NOT EXISTS games_player0 ON games(player0);
     CREATE INDEX IF NOT EXISTS games_player1 ON games(player1);
     CREATE INDEX IF NOT EXISTS seeks_open ON seeks(game_id);

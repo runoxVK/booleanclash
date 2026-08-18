@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import * as api from './api.js';
+import * as race from './race.js';
 import { ApiError } from './api.js';
 import { openDatabase } from './db.js';
 
@@ -36,6 +37,15 @@ const routes: {
   { method: 'GET', pattern: /^\/api\/games$/, handler: (c) => api.myGames(c) },
   { method: 'GET', pattern: /^\/api\/games\/([\w-]+)$/, handler: (c, p) => api.getGame(c, p[0]) },
   { method: 'POST', pattern: /^\/api\/games\/([\w-]+)\/moves$/, handler: (c, p, b) => api.postMove(c, p[0], b) },
+
+  { method: 'GET', pattern: /^\/api\/race-seeks$/, handler: (c) => race.listRaceSeeks(c) },
+  { method: 'POST', pattern: /^\/api\/race-seeks$/, handler: (c, _p, b) => race.createRaceSeek(c, b) },
+  { method: 'DELETE', pattern: /^\/api\/race-seeks\/([\w-]+)$/, handler: (c, p) => race.cancelRaceSeek(c, p[0]) },
+  { method: 'POST', pattern: /^\/api\/race-seeks\/([\w-]+)\/accept$/, handler: (c, p) => race.acceptRaceSeek(c, p[0]) },
+
+  { method: 'GET', pattern: /^\/api\/races$/, handler: (c) => race.myRaces(c) },
+  { method: 'GET', pattern: /^\/api\/races\/([\w-]+)$/, handler: (c, p) => race.getRace(c, p[0]) },
+  { method: 'POST', pattern: /^\/api\/races\/([\w-]+)\/submit$/, handler: (c, p, b) => race.submitRace(c, p[0], b) },
 ];
 
 function readBody(req: IncomingMessage): Promise<unknown> {
@@ -75,6 +85,13 @@ const ENDPOINTS = [
   ['GET', '/api/games', 'Your games, most recently moved first.'],
   ['GET', '/api/games/:id', 'One game: the puzzle and every move played.'],
   ['POST', '/api/games/:id/moves', 'Play a move. Body: {move, expectedPly}.'],
+  ['GET', '/api/race-seeks', 'Open race challenges (separate boards, one clock).'],
+  ['POST', '/api/race-seeks', 'Post a race challenge. Body: {inputCount, timeLimitMs}.'],
+  ['DELETE', '/api/race-seeks/:id', 'Withdraw your race challenge.'],
+  ['POST', '/api/race-seeks/:id/accept', 'Accept a race challenge and start it.'],
+  ['GET', '/api/races', 'Your races.'],
+  ['GET', '/api/races/:id', 'One race: your board, the opponent status, the clock.'],
+  ['POST', '/api/races/:id/submit', 'Record your circuit. Body: {circuit}.'],
 ] as const;
 
 /**
