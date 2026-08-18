@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as api from './api.js';
 import * as race from './race.js';
 import { ApiError } from './api.js';
@@ -27,9 +28,13 @@ const HOST = process.env.HOST ?? '0.0.0.0';
  * one origin, no CORS, nothing for a friend to configure. Without a build the
  * server is still a plain API and the dev server handles the UI.
  */
-const CLIENT_DIR = resolve(
-  process.env.CLIENT_DIR ?? 'packages/app/dist',
-);
+/* Resolved against THIS FILE, not the working directory. `npm run server` runs
+   inside packages/server, so a cwd-relative path silently looked for
+   packages/server/packages/app/dist and served the API index instead of the
+   game. */
+const CLIENT_DIR = process.env.CLIENT_DIR
+  ? resolve(process.env.CLIENT_DIR)
+  : fileURLToPath(new URL('../../app/dist', import.meta.url));
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -301,4 +306,11 @@ const server = createServer((req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Logiclash server on http://localhost:${PORT}  (db: ${DB_FILE})`);
+  void stat(join(CLIENT_DIR, 'index.html')).then(
+    () => console.log(`Serving the game from ${CLIENT_DIR}`),
+    () =>
+      console.log(
+        `No built client at ${CLIENT_DIR} — API only. Run "npm run build" (or "npm run share").`,
+      ),
+  );
 });
