@@ -4,3 +4,7 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 shots/
+
+# server database
+logiclash.db
+logiclash.db-*

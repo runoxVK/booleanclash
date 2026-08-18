@@ -15,5 +15,7 @@ export * from './cost.js';
 export * from './codex.js';
 export * from './merge.js';
 export * from './edit.js';
+export * from './board.js';
+export * from './duel.js';
 export * from './random.js';
 export * from './generate.js';

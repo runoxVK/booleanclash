@@ -9,8 +9,9 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/engine/tsconfig.json && tsc -p packages/app/tsconfig.json && tsc -p tsconfig.json",
+    "typecheck": "tsc -p packages/engine/tsconfig.json && tsc -p packages/app/tsconfig.json && tsc -p packages/server/tsconfig.json && tsc -p tsconfig.json",
     "dev": "npm run dev -w @logiclash/app",
+    "server": "npm run start -w @logiclash/server",
     "build": "npm run build -w @logiclash/app",
     "preview": "npm run preview -w @logiclash/app",
     "play": "tsx scripts/play.ts",

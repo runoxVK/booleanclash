@@ -55,6 +55,24 @@ export const TUNING = {
    */
   maxChipArity: 4,
 
+  /**
+   * Two-player duel settings.
+   *
+   * `partBudget` is what stops a duel stalling forever. Both players want the
+   * circuit finished but only whoever completes it scores, so each will burn
+   * moves on waiting gates to make the finishing move land on their own turn.
+   * Charging those to a shared pool means stalling has a cost and eventually
+   * forces the issue. Packaging returns parts to the pool, which is what makes
+   * recognising a component a tempo weapon rather than only an economy.
+   *
+   * `plyLimit` is the backstop: rewiring does not consume the budget, so
+   * without it two stubborn players could shuffle wires indefinitely.
+   */
+  duel: {
+    partBudget: 14,
+    plyLimit: 40,
+  },
+
 } as const;
 
 export type Tuning = typeof TUNING;
