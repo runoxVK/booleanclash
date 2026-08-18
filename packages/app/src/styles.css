@@ -935,3 +935,13 @@ ul.catalogue .ctick {
 ul.catalogue li.found .cname {
   color: var(--chip);
 }
+
+/* Dragging on the board must never start a text selection: without this,
+   pulling a wire smears highlight across the page. touch-action keeps a
+   trackpad or touchscreen from panning instead of dragging. */
+svg.board,
+.toolbox {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}

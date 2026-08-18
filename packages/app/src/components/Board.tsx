@@ -162,7 +162,27 @@ export function Board({
 
   /* ---------------- pointer handling ---------------- */
 
+  /**
+   * Start a drag properly.
+   *
+   * preventDefault stops the browser treating the drag as a text selection,
+   * which otherwise smears highlight across the page as you pull a wire.
+   * Capturing the pointer on the surface means the drag keeps tracking even when
+   * the cursor wanders off the board, instead of dying halfway.
+   */
+  const beginDrag = (event: ReactPointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      svgRef.current?.setPointerCapture(event.pointerId);
+    } catch {
+      // Some pointers cannot be captured; the drag still works, it just stops
+      // tracking if the cursor leaves the board.
+    }
+  };
+
   const onSurfacePointerDown = (event: ReactPointerEvent) => {
+    event.preventDefault();
     const { x, y } = toBoard(event);
     const cell = cellAtPoint(x, y);
     if (armed && cell && occupant(cells, cell) === null) {
@@ -189,6 +209,13 @@ export function Board({
   };
 
   const onPointerUp = (event: ReactPointerEvent) => {
+    try {
+      if (svgRef.current?.hasPointerCapture(event.pointerId)) {
+        svgRef.current.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Nothing to release.
+    }
     if (!drag) return;
     const { x, y } = toBoard(event);
 
@@ -246,10 +273,8 @@ export function Board({
         onPointerDown={onSurfacePointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={() => {
-          setDrag(null);
-          setHover(null);
-        }}
+        onPointerLeave={() => setHover(null)}
+        onPointerCancel={() => setDrag(null)}
       >
         <rect className="canvas" width={BOARD_W} height={BOARD_H} />
 
@@ -353,7 +378,7 @@ export function Board({
                 height={PART_H}
                 rx={9}
                 onPointerDown={(event) => {
-                  event.stopPropagation();
+                  beginDrag(event);
                   const p = toBoard(event);
                   setDrag({
                     kind: 'move',
@@ -382,6 +407,7 @@ export function Board({
                       (filled ? '' : ' empty')
                     }
                     onPointerDown={(event) => {
+                      event.preventDefault();
                       event.stopPropagation();
                       if (filled) onUnwire(node.id, i);
                     }}
@@ -399,7 +425,7 @@ export function Board({
               <g
                 className={`pin-group out${bit === 1 ? ' hot' : ''}`}
                 onPointerDown={(event) => {
-                  event.stopPropagation();
+                  beginDrag(event);
                   const p = toBoard(event);
                   setDrag({ kind: 'wire', sourceId: node.id, x: p.x, y: p.y });
                 }}
@@ -416,6 +442,7 @@ export function Board({
                 <g
                   className={`switch${bit === 1 ? ' on' : ''}`}
                   onPointerDown={(event) => {
+                    event.preventDefault();
                     event.stopPropagation();
                     onFlipInput(node.inputIndex ?? 0);
                   }}
