@@ -65,6 +65,85 @@ function readBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
+const ENDPOINTS = [
+  ['POST', '/api/players', 'Create a player. Body: {handle}. Returns a token — keep it.'],
+  ['GET', '/api/me', 'Who am I? Needs Authorization: Bearer <token>.'],
+  ['GET', '/api/seeks', 'Open challenges waiting for an opponent.'],
+  ['POST', '/api/seeks', 'Post a challenge. Body: {inputCount: 3 | 4 | 5}.'],
+  ['DELETE', '/api/seeks/:id', 'Withdraw your challenge.'],
+  ['POST', '/api/seeks/:id/accept', 'Accept a challenge and start a game.'],
+  ['GET', '/api/games', 'Your games, most recently moved first.'],
+  ['GET', '/api/games/:id', 'One game: the puzzle and every move played.'],
+  ['POST', '/api/games/:id/moves', 'Play a move. Body: {move, expectedPly}.'],
+] as const;
+
+/**
+ * Opening the API root in a browser used to return a bare 404, which is a
+ * miserable first impression when you are trying to work out whether the thing
+ * is even running. It answers for itself now.
+ */
+function sendIndex(res: ServerResponse, wantsHtml: boolean): void {
+  if (!wantsHtml) {
+    send(res, 200, {
+      name: 'logiclash-server',
+      status: 'ok',
+      note: 'This is the API. The game UI is a separate dev server on port 5173.',
+      endpoints: ENDPOINTS.map(([method, path, note]) => ({ method, path, note })),
+    });
+    return;
+  }
+
+  /* Notes contain things like <token>, which a browser would happily swallow as
+     a tag. The JSON view keeps them literal, so escaping belongs here. */
+  const escape = (text: string) =>
+    text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const rows = ENDPOINTS.map(
+    ([method, path, note]) =>
+      `<tr><td class="m">${method}</td><td><code>${escape(path)}</code></td><td>${escape(note)}</td></tr>`,
+  ).join('');
+
+  const html = `<!doctype html>
+<meta charset="utf-8"><title>Logiclash server</title>
+<style>
+  body { font: 15px/1.6 ui-sans-serif, system-ui, sans-serif; color: #1c1c1a;
+         background: #f6f6f4; margin: 0; padding: 40px 24px; }
+  main { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 20px; letter-spacing: .06em; text-transform: uppercase; }
+  p { max-width: 62ch; color: #55544e; }
+  table { border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 13.5px; }
+  th { text-align: left; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+       color: #75746d; border-bottom: 1.5px solid #111; padding: 4px 10px 6px 0; }
+  td { padding: 7px 10px 7px 0; border-bottom: 1px solid #dcdbd4; vertical-align: top; }
+  td.m { font: 700 11px ui-monospace, monospace; color: #1668c4; white-space: nowrap; }
+  code { background: #eceae3; border: 1px solid #dcdbd4; border-radius: 3px; padding: 1px 5px;
+         font-size: 12.5px; }
+  .ok { color: #1c8f4a; font-weight: 700; }
+</style>
+<main>
+  <h1>Logiclash server</h1>
+  <p><span class="ok">Running.</span> This is the multiplayer API — there is no
+     website here. The game itself is a separate dev server, normally on
+     <code>http://localhost:5173</code>.</p>
+  <p>Everything below needs <code>Authorization: Bearer &lt;token&gt;</code>
+     except creating a player and listing open challenges.</p>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>What it does</th></tr>
+    ${rows}
+  </table>
+</main>`;
+
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(html),
+    'cache-control': 'no-store',
+  });
+  res.end(html);
+}
+
 function send(res: ServerResponse, status: number, payload: unknown): void {
   const body = JSON.stringify(payload ?? null);
   res.writeHead(status, {
@@ -90,12 +169,22 @@ const server = createServer((req, res) => {
     }
 
     const path = (req.url ?? '/').split('?')[0];
+
+    if (req.method === 'GET' && (path === '/' || path === '/api')) {
+      const accept = req.headers.accept ?? '';
+      sendIndex(res, accept.includes('text/html'));
+      return;
+    }
+
     const route = routes.find(
       (r) => r.method === req.method && r.pattern.test(path),
     );
 
     if (!route) {
-      send(res, 404, { error: 'No such endpoint.' });
+      send(res, 404, {
+        error: `No such endpoint: ${req.method} ${path}`,
+        hint: 'Open / for the list of endpoints.',
+      });
       return;
     }
 
