@@ -304,6 +304,31 @@ const server = createServer((req, res) => {
   })();
 });
 
+/* A busy port is the most common way to fail to start, and Node's default is an
+   unhandled 'error' event: twenty lines of stack trace that never mention the
+   port. Say the useful thing instead. */
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `
+Port ${PORT} is already in use — something else is listening there,` +
+        `
+very likely another copy of this server.
+` +
+        `
+  Windows:  netstat -ano | findstr :${PORT}    then: taskkill /PID <pid> /F` +
+        `
+  Or use a different port:  PORT=8788 npm run server
+`,
+    );
+  } else {
+    console.error(`
+Server could not start: ${error.message}
+`);
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`Logiclash server on http://localhost:${PORT}  (db: ${DB_FILE})`);
   void stat(join(CLIENT_DIR, 'index.html')).then(
