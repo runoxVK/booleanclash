@@ -1,117 +1,85 @@
-import type { MergeProposal, NodeId } from '@logiclash/engine';
 import type { GameState } from './game';
 
 /**
- * The coach line: one sentence, always on screen, saying the next thing to do.
+ * The coach line: one sentence saying how to operate the board.
  *
- * The game's interaction model — select signals, then apply a gate to them — is
- * not one anybody arrives already knowing, and a board full of parts with no
- * prompt is a dead end. So rather than a tutorial you sit through once and then
- * forget, the game reads its own state and says the next move out loud, forever.
- * It costs nothing once you know the game and rescues you when you do not.
- *
- * Rules are checked in priority order: the most useful thing to say wins.
+ * Note the hard limit on what it is allowed to know. It explains the CONTROLS —
+ * place a part, wire a pin, flip a switch — and it never searches the board for
+ * a repeated shape. Spotting the repeat is the skill the whole game is built on;
+ * a hint that points at it is not a teaching aid, it is the game playing itself.
+ * The only merge feedback anywhere is the Merge button confirming or refusing a
+ * selection the player made on their own.
  */
 
 export interface Coaching {
   readonly text: string;
-  /** `do` = here's your next move, `ready` = something good is available now. */
+  /** `do` = here is how, `ready` = an action is available, `win` = solved. */
   readonly tone: 'do' | 'ready' | 'win';
 }
 
 export function coach(
   state: GameState,
-  values: ReadonlyMap<NodeId, bigint>,
-  proposal: MergeProposal,
   solved: boolean,
   total: number,
   par: number,
-  /** A merge sitting on the board that the player has not selected yet. */
-  suggestion: { name: string; saved: number } | null,
 ): Coaching {
-  const { selection, registry, puzzle } = state;
-  const count = selection.length;
+  const { circuit, selection, armed } = state;
 
   if (solved) {
-    if (suggestion) {
-      return {
-        text: `Solved in ${total} — but you built the same shape twice. Press F to highlight it, then Merge to save ${suggestion.saved}.`,
-        tone: 'ready',
-      };
-    }
     return {
       text:
         total <= par
           ? `Solved in ${total} — par is ${par}. Take the next puzzle, or keep trimming.`
-          : `Solved in ${total}, but par is ${par}. Look for a shape you built more than once.`,
+          : `Solved in ${total}, but par is ${par}. Fewer parts is always possible.`,
       tone: 'win',
     };
   }
 
-  /* A live merge is the most valuable thing on screen — it is the whole game. */
-  if (proposal.ok) {
-    const { name, matches, saved } = proposal.candidate;
+  if (armed) {
+    const what = armed.kind === 'gate' ? armed.gate.toLowerCase() : 'chip';
     return {
-      text: `You built the same shape ${matches.length} times. Merge it into a ${name} chip and save ${saved}.`,
+      text: `Click an empty cell to drop the ${what}. Press Esc to put it back.`,
       tone: 'ready',
     };
   }
 
-  /* A merge sitting unnoticed on the board beats any build advice: it is the
-     mechanic the whole game turns on, and it is invisible until pointed at. */
-  if (suggestion) {
-    return {
-      text: `There is a repeated shape on the board — merging it into a ${suggestion.name} chip saves ${suggestion.saved}. Press F to highlight it.`,
-      tone: 'ready',
-    };
-  }
+  const parts = [...circuit.nodes.values()];
+  const placed = parts.filter((n) => n.kind !== 'INPUT');
 
-  if (count === 0) {
-    const built = [...state.circuit.nodes.values()].some(
-      (n) => n.kind !== 'INPUT',
-    );
+  if (placed.length === 0) {
     return {
-      text: built
-        ? 'Click a part to select it. Gates take their inputs from whatever you have selected.'
-        : `Click input a, then input b. Then pick a gate from the toolbox to join them.`,
+      text: 'Pick a gate from the toolbox, then click a cell on the grid to place it.',
       tone: 'do',
     };
   }
 
-  if (count === 1) {
-    const chip = [...registry.values()].find((c) => c.arity === 1);
+  const emptyPins = placed.reduce(
+    (n, node) => n + node.inputs.filter((ref) => ref === null).length,
+    0,
+  );
+  if (emptyPins > 0) {
     return {
-      text: `1 selected. Press N for NOT${chip ? ` or place ${chip.name}` : ''}, or click a second part to unlock AND and OR.`,
+      text: `${emptyPins} pin${emptyPins === 1 ? '' : 's'} still unwired. Drag from a part's top pin down into an empty bottom pin.`,
       tone: 'do',
     };
   }
 
-  if (count === 2) {
-    const chip = [...registry.values()].find((c) => c.arity === 2);
+  if (selection.length > 0) {
     return {
-      text: `2 selected. Press A for AND, O for OR${chip ? `, or place your ${chip.name} chip` : ''}.`,
-      tone: 'ready',
+      text: `${selection.length} selected. Merge needs a whole repeated shape — or press Esc to clear.`,
+      tone: 'do',
     };
   }
 
-  const chip = [...registry.values()].find((c) => c.arity === count);
-  if (chip) {
+  if (circuit.outputId === null) {
     return {
-      text: `${count} selected — your ${chip.name} chip takes exactly that many. Place it from the toolbox.`,
-      tone: 'ready',
-    };
-  }
-
-  /* More than two selected is only useful for merging, so say what is missing. */
-  if (!proposal.ok && proposal.reason === 'not-enough-instances') {
-    return {
-      text: `That shape only appears once. Build it again somewhere else — on different signals — and you can merge them.`,
+      text: 'Everything is wired. Flip the switches to check it, and the part that matches the target becomes the output.',
       tone: 'do',
     };
   }
 
   return {
-    text: `${count} parts selected. Gates take 1 or 2 inputs — press Esc to clear, or merge a repeated shape.`,
+    text: `${total} parts used, par is ${par}. Click parts to select a shape you think repeats.`,
     tone: 'do',
   };
 }
@@ -121,3 +89,4 @@ export function describeGoal(inputCount: number): string {
   const names = 'abcdefgh'.slice(0, inputCount).split('').join(', ');
   return `Build a circuit whose output matches the WANT column for every setting of ${names}.`;
 }
+

@@ -97,6 +97,7 @@ export class CircuitBuilder {
 export function validate(circuit: Circuit): void {
   for (const node of circuit.nodes.values()) {
     for (const ref of node.inputs) {
+      if (ref === null) continue; // an empty pin is legal, just not useful yet
       if (!circuit.nodes.has(ref)) {
         throw new CircuitError(
           `Node "${node.id}" references unknown node "${ref}"`,
@@ -153,7 +154,9 @@ function assertAcyclic(circuit: Circuit): void {
     state.set(id, 'visiting');
     const node = circuit.nodes.get(id);
     if (node) {
-      for (const ref of node.inputs) walk(ref, [...trail, id]);
+      for (const ref of node.inputs) {
+        if (ref !== null) walk(ref, [...trail, id]);
+      }
     }
     state.set(id, 'done');
   };
@@ -178,16 +181,39 @@ export function evaluate(
 ): Map<NodeId, bigint> {
   const mask = maskFor(circuit.inputCount);
   const values = new Map<NodeId, bigint>();
+  const settled = new Set<NodeId>();
 
-  const visit = (id: NodeId): bigint => {
-    const cached = values.get(id);
-    if (cached !== undefined) return cached;
+  /**
+   * Returns undefined for a node that cannot produce a value yet, because a pin
+   * upstream of it is still empty. Those nodes are simply absent from the
+   * result, so callers see "no value" rather than a misleading zero.
+   */
+  const visit = (id: NodeId): bigint | undefined => {
+    if (settled.has(id)) return values.get(id);
 
     const node = circuit.nodes.get(id);
     if (!node) throw new CircuitError(`Unknown node "${id}"`);
 
     // validate() already proved the graph is acyclic, so plain recursion is safe.
-    const args = node.inputs.map(visit);
+    const args: bigint[] = [];
+    let incomplete = false;
+    for (const ref of node.inputs) {
+      if (ref === null) {
+        incomplete = true;
+        break;
+      }
+      const arg = visit(ref);
+      if (arg === undefined) {
+        incomplete = true;
+        break;
+      }
+      args.push(arg);
+    }
+
+    if (incomplete) {
+      settled.add(id);
+      return undefined;
+    }
 
     let value: bigint;
     switch (node.kind) {
@@ -224,6 +250,7 @@ export function evaluate(
       }
     }
 
+    settled.add(id);
     values.set(id, value);
     return value;
   };
@@ -263,7 +290,9 @@ export function reachableFrom(circuit: Circuit, id: NodeId): Set<NodeId> {
     if (seen.has(current)) continue;
     seen.add(current);
     const node = circuit.nodes.get(current);
-    if (node) stack.push(...node.inputs);
+    if (node) {
+      for (const ref of node.inputs) if (ref !== null) stack.push(ref);
+    }
   }
   return seen;
 }

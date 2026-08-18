@@ -1,22 +1,73 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+} from 'react';
 import type { ChipRegistry, Circuit, NodeId } from '@logiclash/engine';
-import { layout, NODE_H, NODE_W } from '../layout';
+import {
+  BOARD_H,
+  BOARD_W,
+  CELL_H,
+  CELL_W,
+  COLS,
+  DOCK_H,
+  PART_H,
+  PART_W,
+  ROWS,
+  cellAtPoint,
+  inPin,
+  occupant,
+  outPin,
+  partOrigin,
+  type Cell,
+  type CellMap,
+} from '../grid';
+import type { Tool } from '../game';
 
 const INPUT_NAMES = 'abcdefgh';
 const PIN_R = 9;
 const PIN_LABELS = ['a', 'b', 'c', 'd'];
+/** How close a dropped wire has to land to count as hitting a pin. */
+const SNAP = 26;
+/** Movement beyond this turns a click into a drag. */
+const DRAG_SLOP = 5;
 
 interface BoardProps {
   readonly circuit: Circuit;
   readonly registry: ChipRegistry;
   readonly values: ReadonlyMap<NodeId, bigint>;
+  readonly cells: CellMap;
   readonly selection: readonly NodeId[];
+  readonly armed: Tool | null;
   readonly target: bigint;
-  /** Which row of the truth table the switches are currently set to. */
   readonly probeRow: number;
-  readonly onToggle: (id: NodeId) => void;
+  readonly onSelect: (id: NodeId) => void;
+  readonly onPlace: (cell: Cell) => void;
+  readonly onMove: (id: NodeId, cell: Cell) => void;
+  readonly onWire: (targetId: NodeId, pin: number, sourceId: NodeId) => void;
+  readonly onUnwire: (targetId: NodeId, pin: number) => void;
   readonly onFlipInput: (index: number) => void;
+  readonly onBackground: () => void;
 }
+
+type Drag =
+  | {
+      readonly kind: 'move';
+      readonly id: NodeId;
+      readonly originX: number;
+      readonly originY: number;
+      readonly x: number;
+      readonly y: number;
+      readonly moved: boolean;
+    }
+  | {
+      readonly kind: 'wire';
+      readonly sourceId: NodeId;
+      readonly x: number;
+      readonly y: number;
+    }
+  | null;
 
 function labelFor(circuit: Circuit, registry: ChipRegistry, id: NodeId): string {
   const node = circuit.nodes.get(id);
@@ -28,192 +79,316 @@ function labelFor(circuit: Circuit, registry: ChipRegistry, id: NodeId): string 
   return node.kind.toLowerCase();
 }
 
-function bitsFor(value: bigint, inputCount: number): string {
-  const rows = 1 << inputCount;
-  let out = '';
-  for (let r = 0; r < rows; r++) out += (value >> BigInt(r)) & 1n ? '1' : '0';
-  return out;
+/** Orthogonal route from an output pin up into an input pin. */
+function wirePath(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): string {
+  const mid = (from.y + to.y) / 2;
+  return `M ${from.x} ${from.y} V ${mid} H ${to.x} V ${to.y}`;
 }
 
-/** Where a part's output pin sits. */
-function outPin(at: { x: number; y: number }) {
-  return { x: at.x + NODE_W / 2, y: at.y };
-}
-
-/** Where a part's i-th input pin sits along its bottom edge. */
-function inPin(at: { x: number; y: number }, i: number, count: number) {
-  return { x: at.x + (NODE_W * (i + 1)) / (count + 1), y: at.y + NODE_H };
+/** Pin offsets within a part, independent of which cell it sits in. */
+function localInPin(index: number, count: number): { x: number; y: number } {
+  return { x: (PART_W * (index + 1)) / (count + 1), y: PART_H };
 }
 
 export function Board({
   circuit,
   registry,
   values,
+  cells,
   selection,
+  armed,
   target,
   probeRow,
-  onToggle,
+  onSelect,
+  onPlace,
+  onMove,
+  onWire,
+  onUnwire,
   onFlipInput,
+  onBackground,
 }: BoardProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [drag, setDrag] = useState<Drag>(null);
+  const [hover, setHover] = useState<Cell | null>(null);
+
   const selectionIndex = new Map(selection.map((id, i) => [id, i + 1]));
 
-  /* The work area should fill its pane rather than sitting as a small box in a
-     large empty one. Measure the pane, scale a small circuit up a little to suit
-     it, and centre the result; oversized circuits keep their size and scroll. */
-  const pane = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
-
-  useEffect(() => {
-    const el = pane.current;
-    if (!el) return;
-    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  /* Zoom has to respect BOTH dimensions. Sizing on width alone blows a
-     multi-layer circuit up until it overflows the bottom of the pane. */
-  const natural = layout(circuit);
-  const scale =
-    box.w > 0 && box.h > 0
-      ? Math.max(
-          0.5,
-          Math.min(1.6, box.w / natural.width, box.h / natural.height),
-        )
-      : 1;
-
-  const { positions, width, height } = layout(
-    circuit,
-    box.h > 0 ? box.h / scale : 0,
-  );
-
-  /* The SVG keeps a fixed CSS size and expresses zoom through the viewBox
-     instead. Changing an SVG's intrinsic width/height every render leaves the
-     browser repainting stale copies of the previous, larger frame, and it can
-     oscillate against its own scrollbar: grow, scrollbar appears, container
-     shrinks, shrink, scrollbar goes, repeat. */
-  const viewW = Math.max(width, box.w > 0 ? box.w / scale : width);
-  const viewH = Math.max(height, box.h > 0 ? box.h / scale : height);
-  const offsetX = (viewW - width) / 2;
-
-  const bitOf = (id: NodeId): number | null => {
+  const bitOf = (id: NodeId | null): number | null => {
+    if (id === null) return null;
     const value = values.get(id);
     if (value === undefined) return null;
     return Number((value >> BigInt(probeRow)) & 1n);
   };
 
-  /* Wires run upward: out of the source's top pin, across a shared horizontal,
-     then up into the target's bottom pin. Right angles read as a diagram. */
+  /** Client coordinates into board coordinates, independent of zoom. */
+  const toBoard = (event: ReactPointerEvent): { x: number; y: number } => {
+    const svg = svgRef.current;
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm) return { x: 0, y: 0 };
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(
+      ctm.inverse(),
+    );
+    return { x: point.x, y: point.y };
+  };
+
+  /* Every pin on the board, so a dropped wire can snap to the nearest one.
+     Hit-testing by geometry rather than by event target keeps the drop working
+     even though the pointer is captured by the surface, not the pin. */
+  const pinTargets: { id: NodeId; pin: number; x: number; y: number }[] = [];
+  for (const node of circuit.nodes.values()) {
+    const cell = cells.get(node.id);
+    if (!cell) continue;
+    node.inputs.forEach((_, i) => {
+      const at = inPin(cell, i, node.inputs.length);
+      pinTargets.push({ id: node.id, pin: i, x: at.x, y: at.y });
+    });
+  }
+
+  const nearestPin = (x: number, y: number) => {
+    let best: { id: NodeId; pin: number } | null = null;
+    let bestDistance = SNAP * SNAP;
+    for (const t of pinTargets) {
+      const distance = (t.x - x) ** 2 + (t.y - y) ** 2;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { id: t.id, pin: t.pin };
+      }
+    }
+    return best;
+  };
+
+  /* ---------------- pointer handling ---------------- */
+
+  const onSurfacePointerDown = (event: ReactPointerEvent) => {
+    const { x, y } = toBoard(event);
+    const cell = cellAtPoint(x, y);
+    if (armed && cell && occupant(cells, cell) === null) {
+      onPlace(cell);
+      return;
+    }
+    if (!cell || occupant(cells, cell) === null) onBackground();
+  };
+
+  const onPointerMove = (event: ReactPointerEvent) => {
+    const { x, y } = toBoard(event);
+    setHover(cellAtPoint(x, y));
+    if (!drag) return;
+
+    if (drag.kind === 'move') {
+      const moved =
+        drag.moved ||
+        Math.abs(x - drag.originX) > DRAG_SLOP ||
+        Math.abs(y - drag.originY) > DRAG_SLOP;
+      setDrag({ ...drag, x, y, moved });
+    } else {
+      setDrag({ ...drag, x, y });
+    }
+  };
+
+  const onPointerUp = (event: ReactPointerEvent) => {
+    if (!drag) return;
+    const { x, y } = toBoard(event);
+
+    if (drag.kind === 'move') {
+      // A press that never moved is a click, and a click selects.
+      if (!drag.moved) {
+        onSelect(drag.id);
+      } else {
+        const cell = cellAtPoint(x, y);
+        if (cell) onMove(drag.id, cell);
+      }
+    } else {
+      const hit = nearestPin(x, y);
+      if (hit && hit.id !== drag.sourceId) {
+        onWire(hit.id, hit.pin, drag.sourceId);
+      }
+    }
+    setDrag(null);
+  };
+
+  /* ---------------- geometry ---------------- */
+
   const wires: ReactElement[] = [];
   for (const node of circuit.nodes.values()) {
-    const to = positions.get(node.id);
+    const to = cells.get(node.id);
     if (!to) continue;
-
     node.inputs.forEach((sourceId, i) => {
-      const from = positions.get(sourceId);
+      if (sourceId === null) return;
+      const from = cells.get(sourceId);
       if (!from) return;
-
-      const a = outPin(from);
-      const b = inPin(to, i, node.inputs.length);
-      const my = (a.y + b.y) / 2;
-
       wires.push(
         <path
           key={`${sourceId}->${node.id}:${i}`}
           className={`wire${bitOf(sourceId) === 1 ? ' hot' : ''}`}
-          d={`M ${a.x} ${a.y} V ${my} H ${b.x} V ${b.y}`}
+          d={wirePath(outPin(from), inPin(to, i, node.inputs.length))}
         />,
       );
     });
   }
 
-  /* The output terminal is a fixed dock on the ceiling. */
-  const outX = width / 2;
-  const outY = 26;
-  const outBit =
-    circuit.outputId !== null ? bitOf(circuit.outputId) : null;
-  const outSource =
-    circuit.outputId !== null ? positions.get(circuit.outputId) : undefined;
+  const dock = { x: BOARD_W / 2, y: 30 };
+  const outBit = circuit.outputId !== null ? bitOf(circuit.outputId) : null;
+  const outCell =
+    circuit.outputId !== null ? cells.get(circuit.outputId) : undefined;
+  const dragSourceCell =
+    drag?.kind === 'wire' ? cells.get(drag.sourceId) : undefined;
 
   return (
-    <div className="board-scroll" ref={pane}>
+    <div className="board-scroll">
       <svg
-        className="board"
-        viewBox={`0 0 ${viewW} ${viewH}`}
+        ref={svgRef}
+        className={`board${armed ? ' placing' : ''}`}
+        viewBox={`0 0 ${BOARD_W} ${BOARD_H}`}
         preserveAspectRatio="xMidYMid meet"
+        onPointerDown={onSurfacePointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={() => {
+          setDrag(null);
+          setHover(null);
+        }}
       >
-        <rect className="canvas" x={0} y={0} width={viewW} height={viewH} />
+        <rect className="canvas" width={BOARD_W} height={BOARD_H} />
 
-        <g transform={`translate(${offsetX} 0)`}>
-        {outSource && (
-          <path
-            className={`wire${outBit === 1 ? ' hot' : ''}`}
-            d={`M ${outPin(outSource).x} ${outPin(outSource).y} V ${(outPin(outSource).y + outY + 22) / 2} H ${outX} V ${outY + 22}`}
+        <g className="grid">
+          {Array.from({ length: ROWS + 1 }, (_, r) => (
+            <line
+              key={`h${r}`}
+              x1={0}
+              y1={DOCK_H + r * CELL_H}
+              x2={BOARD_W}
+              y2={DOCK_H + r * CELL_H}
+            />
+          ))}
+          {Array.from({ length: COLS + 1 }, (_, c) => (
+            <line
+              key={`v${c}`}
+              x1={c * CELL_W}
+              y1={DOCK_H}
+              x2={c * CELL_W}
+              y2={BOARD_H}
+            />
+          ))}
+        </g>
+
+        {armed && hover && occupant(cells, hover) === null && (
+          <rect
+            className="cell-hint"
+            x={hover.col * CELL_W + 3}
+            y={DOCK_H + hover.row * CELL_H + 3}
+            width={CELL_W - 6}
+            height={CELL_H - 6}
+            rx={5}
           />
         )}
 
         <g className="wires">{wires}</g>
 
-        {/* Output terminal */}
-        <g className={`terminal out${outBit === 1 ? ' hot' : ''}`}>
-          <rect className="value-box" x={outX - 15} y={outY - 16} width={30} height={26} rx={4} />
-          <text className="value" x={outX} y={outY + 3}>
+        {outCell && (
+          <path
+            className={`wire${outBit === 1 ? ' hot' : ''}`}
+            d={wirePath(outPin(outCell), { x: dock.x, y: dock.y + 22 })}
+          />
+        )}
+
+        {drag?.kind === 'wire' && dragSourceCell && (
+          <path
+            className="wire dragging"
+            d={wirePath(outPin(dragSourceCell), { x: drag.x, y: drag.y })}
+          />
+        )}
+
+        <g className={`terminal${outBit === 1 ? ' hot' : ''}`}>
+          <rect
+            className="value-box"
+            x={dock.x - 15}
+            y={dock.y - 16}
+            width={30}
+            height={26}
+            rx={4}
+          />
+          <text className="value" x={dock.x} y={dock.y + 3}>
             {outBit === null ? '·' : outBit}
           </text>
-          <circle className="pin" cx={outX} cy={outY + 22} r={PIN_R} />
-          <path className="arrow" d={`M ${outX - 8} ${outY + 34} L ${outX + 8} ${outY + 34} L ${outX} ${outY + 46} Z`} />
+          <circle className="pin" cx={dock.x} cy={dock.y + 22} r={PIN_R} />
         </g>
-        <text className="dock-label" x={10} y={outY + 4} textAnchor="start">
+        <text className="dock-label" x={12} y={dock.y + 4}>
           Output
         </text>
 
         {[...circuit.nodes.values()].map((node) => {
-          const at = positions.get(node.id);
-          if (!at) return null;
+          const cell = cells.get(node.id);
+          if (!cell) return null;
+
+          const lifted = drag?.kind === 'move' && drag.id === node.id && drag.moved;
+          const at = lifted
+            ? { x: drag.x - PART_W / 2, y: drag.y - PART_H / 2 }
+            : partOrigin(cell);
 
           const value = values.get(node.id);
           const bit = bitOf(node.id);
           const order = selectionIndex.get(node.id);
-          const isInput = node.kind === 'INPUT';
+          const pins = node.inputs.length;
 
           const classes = ['part', `kind-${node.kind.toLowerCase()}`];
           if (order !== undefined) classes.push('selected');
           if (value !== undefined && value === target) classes.push('matches');
           if (circuit.outputId === node.id) classes.push('is-output');
           if (bit === 1) classes.push('hot');
-
-          const pinCount = node.inputs.length;
+          if (lifted) classes.push('lifted');
+          if (node.inputs.some((ref) => ref === null)) classes.push('unfinished');
 
           return (
-            <g key={node.id} className={classes.join(' ')} transform={`translate(${at.x} ${at.y})`}>
-              <title>
-                {value === undefined
-                  ? labelFor(circuit, registry, node.id)
-                  : `${labelFor(circuit, registry, node.id)}  ${bitsFor(value, circuit.inputCount)}`}
-              </title>
-
+            <g
+              key={node.id}
+              className={classes.join(' ')}
+              transform={`translate(${at.x} ${at.y})`}
+            >
               <rect
                 className="body"
-                width={NODE_W}
-                height={NODE_H}
+                width={PART_W}
+                height={PART_H}
                 rx={9}
-                onClick={() => onToggle(node.id)}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  const p = toBoard(event);
+                  setDrag({
+                    kind: 'move',
+                    id: node.id,
+                    originX: p.x,
+                    originY: p.y,
+                    x: p.x,
+                    y: p.y,
+                    moved: false,
+                  });
+                }}
               />
-
-              <text className="part-label" x={NODE_W / 2} y={NODE_H / 2 + 5} onClick={() => onToggle(node.id)}>
+              <text className="part-label" x={PART_W / 2} y={PART_H / 2 + 5}>
                 {labelFor(circuit, registry, node.id)}
               </text>
 
-              {/* input pins along the bottom edge */}
               {node.inputs.map((sourceId, i) => {
-                const p = inPin({ x: 0, y: 0 }, i, pinCount);
+                const local = localInPin(i, pins);
+                const filled = sourceId !== null;
                 return (
-                  <g key={`pin${i}`} className={bitOf(sourceId) === 1 ? 'pin-group hot' : 'pin-group'}>
-                    <circle className="pin" cx={p.x} cy={p.y} r={PIN_R} />
-                    {pinCount > 1 && (
-                      <text className="pin-label" x={p.x} y={p.y + 3.5}>
+                  <g
+                    key={`pin${i}`}
+                    className={
+                      'pin-group' +
+                      (bitOf(sourceId) === 1 ? ' hot' : '') +
+                      (filled ? '' : ' empty')
+                    }
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      if (filled) onUnwire(node.id, i);
+                    }}
+                  >
+                    <circle className="pin" cx={local.x} cy={local.y} r={PIN_R} />
+                    {pins > 1 && (
+                      <text className="pin-label" x={local.x} y={local.y + 3.5}>
                         {PIN_LABELS[i]}
                       </text>
                     )}
@@ -221,29 +396,47 @@ export function Board({
                 );
               })}
 
-              {/* output pin on the top edge, carrying the live value */}
-              <g className={bit === 1 ? 'pin-group hot' : 'pin-group'}>
-                <circle className="pin" cx={NODE_W / 2} cy={0} r={PIN_R} />
+              <g
+                className={`pin-group out${bit === 1 ? ' hot' : ''}`}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  const p = toBoard(event);
+                  setDrag({ kind: 'wire', sourceId: node.id, x: p.x, y: p.y });
+                }}
+              >
+                <circle className="pin" cx={PART_W / 2} cy={0} r={PIN_R} />
                 {bit !== null && (
-                  <text className="pin-value" x={NODE_W / 2} y={3.5}>
+                  <text className="pin-value" x={PART_W / 2} y={3.5}>
                     {bit}
                   </text>
                 )}
               </g>
 
-              {/* switches let you drive the circuit by hand */}
-              {isInput && (
+              {node.kind === 'INPUT' && (
                 <g
                   className={`switch${bit === 1 ? ' on' : ''}`}
-                  onClick={() => onFlipInput(node.inputIndex ?? 0)}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onFlipInput(node.inputIndex ?? 0);
+                  }}
                 >
-                  <rect className="track" x={NODE_W / 2 - 20} y={NODE_H + 10} width={40} height={18} rx={9} />
-                  <circle className="knob" cx={NODE_W / 2 + (bit === 1 ? 11 : -11)} cy={NODE_H + 19} r={7} />
+                  <rect
+                    className="track"
+                    x={PART_W / 2 - 20}
+                    y={PART_H + 8}
+                    width={40}
+                    height={18}
+                    rx={9}
+                  />
+                  <circle
+                    className="knob"
+                    cx={PART_W / 2 + (bit === 1 ? 11 : -11)}
+                    cy={PART_H + 17}
+                    r={7}
+                  />
                 </g>
               )}
 
-              {/* Square, because round numbered badges would read as pins —
-                  and a pin's number is a signal value, not a selection order. */}
               {order !== undefined && (
                 <g className="order">
                   <rect x={4} y={4} width={17} height={16} rx={3} />
@@ -256,10 +449,9 @@ export function Board({
           );
         })}
 
-        <text className="dock-label" x={10} y={height - 18} textAnchor="start">
+        <text className="dock-label" x={12} y={BOARD_H - 14}>
           Input
         </text>
-        </g>
       </svg>
     </div>
   );

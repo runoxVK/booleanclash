@@ -7,24 +7,24 @@ import { ScorePanel } from './components/ScorePanel';
 import { Toolbox } from './components/Toolbox';
 import { TruthTable } from './components/TruthTable';
 import {
+  arm,
   clearSelection,
-  currentProposal,
   deleteSelected,
   dockOutput,
   mergeSelection,
+  moveNode,
   newGame,
-  placeChip,
-  placeGate,
-  selectSuggestion,
+  placeArmed,
   setOutput,
-  suggestMerge,
   toggleSelect,
+  unwire,
+  wire,
   type GameState,
 } from './game';
+import type { Cell } from './grid';
 import { loadProgress, recordSolve, type Progress } from './progress';
 import { nextPuzzle, PUZZLES, puzzleById } from './puzzles';
 
-/** Start on the gentlest puzzle. Double Trouble is a bad first impression. */
 const OPENING_PUZZLE = PUZZLES[0];
 const UNDO_LIMIT = 60;
 const SEEN_HELP_KEY = 'logiclash.seenHelp.v1';
@@ -59,13 +59,15 @@ export function App() {
     0,
   );
 
-  /* Any move that changes the circuit is undoable. */
+  /* Any move that changes the circuit or the arrangement is undoable. */
   const apply = useCallback((move: (s: GameState) => GameState) => {
     setState((current) => {
       const next = move(current);
-      if (next.circuit !== current.circuit || next.registry !== current.registry) {
-        setPast((stack) => [...stack, current].slice(-UNDO_LIMIT));
-      }
+      const changed =
+        next.circuit !== current.circuit ||
+        next.registry !== current.registry ||
+        next.cells !== current.cells;
+      if (changed) setPast((stack) => [...stack, current].slice(-UNDO_LIMIT));
       return next;
     });
   }, []);
@@ -99,15 +101,6 @@ export function App() {
     [state.circuit, state.registry],
   );
 
-  const proposal = useMemo(() => currentProposal(state), [state]);
-
-  /* Only look for an unnoticed merge when the current selection is not already
-     one, so the hint does not fight the thing the player is doing. */
-  const suggestion = useMemo(
-    () => (proposal.ok ? null : suggestMerge(state)),
-    [proposal.ok, state],
-  );
-
   const focusId: NodeId | null =
     state.selection.length === 1 ? state.selection[0] : state.circuit.outputId;
   const actual = focusId !== null ? values.get(focusId) ?? null : null;
@@ -118,8 +111,8 @@ export function App() {
     state.circuit.outputId !== null &&
     values.get(state.circuit.outputId) === state.puzzle.target;
 
-  /* The moment a part computes the target, dock it. Requiring the player to
-     separately discover "set as output" is a dead end nobody enjoys finding. */
+  /* The moment a part computes the target, dock it. Hunting for a separate
+     "set as output" step is a dead end nobody enjoys finding. */
   useEffect(() => {
     if (state.circuit.outputId !== null) return;
     for (const [id, value] of values) {
@@ -132,20 +125,7 @@ export function App() {
     }
   }, [values, state.circuit, state.puzzle.target]);
 
-  const guidance = coach(
-    state,
-    values,
-    proposal,
-    solved,
-    breakdown.total,
-    state.puzzle.par,
-    suggestion,
-  );
-
-  const highlightSuggestion = useCallback(() => {
-    if (!suggestion) return;
-    setState((s) => selectSuggestion(s, suggestion.selection));
-  }, [suggestion]);
+  const guidance = coach(state, solved, breakdown.total, state.puzzle.par);
 
   /* Bank the score the moment it is achieved, not on some "submit" button. */
   const bankedFor = useRef<string | null>(null);
@@ -169,18 +149,35 @@ export function App() {
       }
       if (event.metaKey || event.ctrlKey) return;
 
+      const gates: Record<string, 'NOT' | 'AND' | 'OR'> = {
+        n: 'NOT',
+        a: 'AND',
+        o: 'OR',
+      };
+
       const moves: Record<string, () => void> = {
-        n: () => apply((s) => placeGate(s, 'NOT')),
-        a: () => apply((s) => placeGate(s, 'AND')),
-        o: () => apply((s) => placeGate(s, 'OR')),
         m: () => apply(mergeSelection),
         enter: () => apply(setOutput),
         delete: () => apply(deleteSelected),
         backspace: () => apply(deleteSelected),
         u: undo,
-        f: highlightSuggestion,
         escape: () => setState(clearSelection),
       };
+
+      const gate = gates[key];
+      if (gate) {
+        event.preventDefault();
+        // Pressing the same key again puts the part back down.
+        setState((s) =>
+          arm(
+            s,
+            s.armed?.kind === 'gate' && s.armed.gate === gate
+              ? null
+              : { kind: 'gate', gate },
+          ),
+        );
+        return;
+      }
 
       const run = moves[key];
       if (run) {
@@ -191,7 +188,7 @@ export function App() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [apply, undo, highlightSuggestion]);
+  }, [apply, undo]);
 
   const best = progress[state.puzzle.id];
   const upNext = nextPuzzle(state.puzzle.id);
@@ -232,19 +229,13 @@ export function App() {
 
       <Toolbox
         chips={[...state.registry.values()]}
-        selected={state.selection.length}
-        onPlaceGate={(kind) => apply((s) => placeGate(s, kind))}
-        onPlaceChip={(chipId) => apply((s) => placeChip(s, chipId))}
+        armed={state.armed}
+        onArm={(tool) => setState((s) => arm(s, tool))}
         onTrash={() => apply(deleteSelected)}
       />
 
       <main>
-        {/* Once solved the banner says it, so only keep the coach around when
-            it still has something new to add. */}
-        {(!solved || suggestion) && (
-          <div className={`coach ${guidance.tone}`}>{guidance.text}</div>
-        )}
-
+        <div className={`coach ${guidance.tone}`}>{guidance.text}</div>
         {solved && (
           <div className="banner">
             <span>
@@ -252,7 +243,6 @@ export function App() {
               {best !== undefined && best < breakdown.total
                 ? ` · your best ${best}`
                 : ''}
-              {breakdown.total < state.puzzle.par ? ' · under par!' : ''}
             </span>
             {upNext && (
               <button onClick={() => startPuzzle(upNext.id)}>
@@ -265,13 +255,20 @@ export function App() {
           circuit={state.circuit}
           registry={state.registry}
           values={values}
+          cells={state.cells}
           selection={state.selection}
+          armed={state.armed}
           target={state.puzzle.target}
           probeRow={probeRow}
-          onToggle={(id) => setState((s) => toggleSelect(s, id))}
+          onSelect={(id) => setState((s) => toggleSelect(s, id))}
+          onPlace={(cell: Cell) => apply((s) => placeArmed(s, cell))}
+          onMove={(id, cell) => apply((s) => moveNode(s, id, cell))}
+          onWire={(t, pin, src) => apply((s) => wire(s, t, pin, src))}
+          onUnwire={(t, pin) => apply((s) => unwire(s, t, pin))}
           onFlipInput={(index) =>
             setInputBits((bits) => bits.map((on, i) => (i === index ? !on : on)))
           }
+          onBackground={() => setState(clearSelection)}
         />
         {state.message && <p className="message">{state.message}</p>}
       </main>
@@ -283,6 +280,7 @@ export function App() {
           solved={solved}
           best={best}
         />
+
         <div className="panel">
           <h2>Target</h2>
           <TruthTable
@@ -303,12 +301,6 @@ export function App() {
           <p className="caption">
             {describeGoal(state.puzzle.inputCount)}
             <br />
-            <br />
-            {state.selection.length === 1
-              ? 'The GOT column is the part you have selected.'
-              : state.circuit.outputId !== null
-                ? 'The GOT column is your output.'
-                : 'Select a part to compare it against the target.'}{' '}
             Clicking a row flips the switches to match it.
           </p>
         </div>
@@ -316,46 +308,28 @@ export function App() {
         <div className="panel">
           <h2>Actions</h2>
           <div className="buttons wide">
+            {/* Deliberately never previews whether the selection is mergeable.
+                A button that lit up on a valid shape would be an oracle you
+                could brute-force against, and finding the repeat is the game. */}
             <button
-              className={proposal.ok ? 'merge ready' : 'merge'}
-              disabled={!proposal.ok}
-              title={proposal.ok ? undefined : proposal.detail}
+              className="merge"
+              disabled={state.selection.length === 0}
               onClick={() => apply(mergeSelection)}
             >
-              {proposal.ok
-                ? `Merge into ${proposal.candidate.name} ×${proposal.candidate.matches.length} · saves ${proposal.candidate.saved}`
-                : 'Merge'}
+              Merge selection
               <kbd>M</kbd>
             </button>
             <button onClick={() => apply(setOutput)}>
               Set as output <kbd>&crarr;</kbd>
             </button>
-            <button
-              className={suggestion ? 'ready' : ''}
-              disabled={!suggestion}
-              onClick={highlightSuggestion}
-              title={
-                suggestion
-                  ? `Highlight a repeated shape worth ${suggestion.saved}`
-                  : 'No repeated shape on the board yet'
-              }
-            >
-              {suggestion ? `Find repeat · ${suggestion.name}` : 'Find repeat'}
-              <kbd>F</kbd>
-            </button>
             <button disabled={past.length === 0} onClick={undo}>
               Undo <kbd>U</kbd>
             </button>
             <button className="ghost" onClick={() => setState(clearSelection)}>
-              Clear selection <kbd>Esc</kbd>
+              Clear <kbd>Esc</kbd>
             </button>
           </div>
-
-          {!proposal.ok && state.selection.length > 0 && (
-            <p className="why">{proposal.detail}</p>
-          )}
         </div>
-
       </aside>
     </div>
   );

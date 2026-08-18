@@ -815,3 +815,75 @@ svg.board {
   background: #eefaf2;
   color: #14663a;
 }
+
+/* ---------------------------------------------------------------- */
+/* Grid board                                                       */
+/* ---------------------------------------------------------------- */
+
+svg.board.placing {
+  cursor: copy;
+}
+
+.grid line {
+  stroke: rgba(0, 0, 0, 0.13);
+  stroke-width: 1;
+}
+
+.cell-hint {
+  fill: rgba(255, 255, 255, 0.5);
+  stroke: var(--stroke);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+/* An empty pin is hollow and dashed: visibly a socket waiting for a wire. */
+.pin-group.empty .pin {
+  fill: #f3f2ee;
+  stroke-dasharray: 3.5 3;
+}
+
+.pin-group.out {
+  cursor: crosshair;
+}
+
+.part .body {
+  cursor: grab;
+}
+
+.part.lifted {
+  opacity: 0.8;
+  pointer-events: none;
+}
+.part.lifted .body {
+  cursor: grabbing;
+}
+
+/* A part with an open pin has no value, so say so rather than looking finished. */
+.part.unfinished .body {
+  stroke-dasharray: 6 3.5;
+}
+
+.wire.dragging {
+  stroke: var(--sel);
+  stroke-dasharray: 6 4;
+}
+
+.toolbox-note {
+  margin: 0;
+  padding: 6px 11px 8px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+button.part-card.armed .card-part .body {
+  fill: #dbe8fa;
+  stroke: var(--sel);
+}
+button.part-card.armed .card-part .pin {
+  stroke: var(--sel);
+}
+button.part-card.armed .card-part .name {
+  fill: var(--sel);
+}

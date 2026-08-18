@@ -86,7 +86,8 @@ export type MergeRejection =
   | 'not-connected'
   | 'internal-fanout'
   | 'not-enough-instances'
-  | 'no-saving';
+  | 'no-saving'
+  | 'incomplete';
 
 export interface MergeCandidate {
   readonly pattern: Pattern;
@@ -134,6 +135,7 @@ function consumersOf(circuit: Circuit): Map<NodeId, NodeId[]> {
   const map = new Map<NodeId, NodeId[]>();
   for (const node of circuit.nodes.values()) {
     for (const ref of node.inputs) {
+      if (ref === null) continue;
       const list = map.get(ref);
       if (list) list.push(node.id);
       else map.set(ref, [node.id]);
@@ -174,6 +176,9 @@ function buildPattern(
     slots.push(undefined);
 
     const inputs: PatternRef[] = node.inputs.map((argId) => {
+      if (argId === null) {
+        throw new CircuitError(`Node "${id}" has an unconnected pin`);
+      }
       if (selected.has(argId)) {
         return { kind: 'node', index: visit(argId) };
       }
@@ -273,6 +278,7 @@ function matchAt(
     for (let i = 0; i < patternNode.inputs.length; i++) {
       const ref = patternNode.inputs[i];
       const argId = node.inputs[i];
+      if (argId === null) return false; // half-wired gates match nothing
       if (ref.kind === 'node') {
         if (!unify(ref.index, argId)) return false;
       } else {
@@ -412,6 +418,16 @@ export function proposeMerge(
       return reject(
         'contains-chip',
         'Chips cannot be nested yet. Select only primitive gates.',
+      );
+    }
+  }
+
+  for (const id of selected) {
+    const node = circuit.nodes.get(id);
+    if (node?.inputs.some((ref) => ref === null)) {
+      return reject(
+        'incomplete',
+        'Every pin in the selection has to be wired up before it can become a chip.',
       );
     }
   }
@@ -586,10 +602,14 @@ export function applyMerge(
 
   // Rewire anything that referenced a replaced instance's output.
   for (const [id, node] of nodes) {
-    if (!node.inputs.some((ref) => rootToChipNode.has(ref))) continue;
+    if (!node.inputs.some((ref) => ref !== null && rootToChipNode.has(ref))) {
+      continue;
+    }
     nodes.set(id, {
       ...node,
-      inputs: node.inputs.map((ref) => rootToChipNode.get(ref) ?? ref),
+      inputs: node.inputs.map((ref) =>
+        ref === null ? null : rootToChipNode.get(ref) ?? ref,
+      ),
     });
   }
 

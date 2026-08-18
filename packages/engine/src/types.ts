@@ -23,8 +23,15 @@ export const PRIMITIVE_ARITY = {
 export interface CircuitNode {
   readonly id: NodeId;
   readonly kind: GateKind;
-  /** Source nodes feeding this gate, in order. Length must match arity. */
-  readonly inputs: readonly NodeId[];
+  /**
+   * Source nodes feeding this gate, in pin order. Length always matches arity;
+   * `null` is a pin that exists but has nothing plugged into it yet.
+   *
+   * Half-wired gates are a real state in an editor where you place a part and
+   * then wire it, so they are modelled here rather than papered over. A node
+   * with an unconnected pin simply has no value.
+   */
+  readonly inputs: readonly (NodeId | null)[];
   /** Which circuit input this reads (0-based). Present iff kind === 'INPUT'. */
   readonly inputIndex?: number;
   /** Which chip definition this instantiates. Present iff kind === 'CHIP'. */

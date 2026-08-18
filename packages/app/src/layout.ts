@@ -51,7 +51,8 @@ export function layout(circuit: Circuit, desiredHeight = 0): LayoutResult {
     const node = circuit.nodes.get(id);
     let depth = 0;
     if (node && node.kind !== 'INPUT' && node.inputs.length > 0) {
-      depth = 1 + Math.max(...node.inputs.map(depthOf));
+      const feeders = node.inputs.filter((ref): ref is NodeId => ref !== null);
+      depth = feeders.length > 0 ? 1 + Math.max(...feeders.map(depthOf)) : 0;
     }
     depths.set(id, depth);
     return depth;

@@ -1,61 +1,74 @@
 import {
+  addChip,
+  addGate,
   applyMerge,
+  canConnect,
   CircuitBuilder,
+  connect,
+  disconnect,
   proposeMerge,
-  TUNING,
+  removeNodes,
+  setOutput as setCircuitOutput,
   type ChipId,
   type ChipRegistry,
   type Circuit,
-  type CircuitNode,
   type NodeId,
 } from '@logiclash/engine';
+import {
+  firstFreeCell,
+  inputCells,
+  occupant,
+  type Cell,
+  type CellMap,
+} from './grid';
 import type { Puzzle } from './puzzles';
 
 /**
  * Game state and the moves that change it.
  *
- * The interaction model is "select signals, then apply a gate" rather than
- * dragging wires. Every gate is therefore fully wired the moment it exists, so
- * the circuit is always valid and the engine never has to model a half-built
- * gate. It is also faster to play, which matters once there is a clock.
+ * Parts are placed on a grid wherever the player wants and wired pin to pin by
+ * hand. Both are deliberate: arranging the board is how you make a repeated
+ * shape visible to yourself, and spotting that repeat is the skill the game is
+ * actually about.
  */
+
+/** What the toolbox has armed for placement, if anything. */
+export type Tool =
+  | { readonly kind: 'gate'; readonly gate: 'NOT' | 'AND' | 'OR' }
+  | { readonly kind: 'chip'; readonly chipId: ChipId };
+
 export interface GameState {
   readonly puzzle: Puzzle;
   readonly circuit: Circuit;
   readonly registry: ChipRegistry;
-  /** Ordered: a gate's pins are filled in the order you clicked. */
+  readonly cells: CellMap;
   readonly selection: readonly NodeId[];
+  readonly armed: Tool | null;
   readonly message: string | null;
 }
 
 export function newGame(puzzle: Puzzle): GameState {
   const builder = new CircuitBuilder(puzzle.inputCount);
-  for (let i = 0; i < puzzle.inputCount; i++) builder.input(i);
+  const ids: NodeId[] = [];
+  for (let i = 0; i < puzzle.inputCount; i++) ids.push(builder.input(i));
+
+  const homes = inputCells(puzzle.inputCount);
+  const cells = new Map<NodeId, Cell>();
+  ids.forEach((id, i) => cells.set(id, homes[i]));
+
   return {
     puzzle,
     circuit: builder.build(),
     registry: new Map(),
+    cells,
     selection: [],
+    armed: null,
     message: null,
   };
 }
 
-function freshNodeId(circuit: Circuit): NodeId {
-  let n = 1;
-  while (circuit.nodes.has(`g${n}`)) n++;
-  return `g${n}`;
-}
-
-function withNodes(
-  circuit: Circuit,
-  nodes: Map<NodeId, CircuitNode>,
-  outputId: NodeId | null = circuit.outputId,
-): Circuit {
-  return { inputCount: circuit.inputCount, nodes, outputId };
-}
-
 /* ------------------------------------------------------------------ */
-/* Selection                                                          */
+/* Selection and tools                                                */
 /* ------------------------------------------------------------------ */
 
 export function toggleSelect(state: GameState, id: NodeId): GameState {
@@ -66,57 +79,83 @@ export function toggleSelect(state: GameState, id: NodeId): GameState {
 }
 
 export function clearSelection(state: GameState): GameState {
-  return { ...state, selection: [], message: null };
+  return { ...state, selection: [], armed: null, message: null };
+}
+
+export function arm(state: GameState, tool: Tool | null): GameState {
+  return { ...state, armed: tool, message: null };
 }
 
 /* ------------------------------------------------------------------ */
-/* Placing gates and chips                                            */
+/* Placing and moving                                                 */
 /* ------------------------------------------------------------------ */
 
-export function placeGate(
-  state: GameState,
-  kind: 'NOT' | 'AND' | 'OR',
-): GameState {
-  const arity = kind === 'NOT' ? 1 : 2;
-  if (state.selection.length !== arity) {
-    return {
-      ...state,
-      message: `${kind} takes ${arity} input${arity === 1 ? '' : 's'} — select exactly ${arity}.`,
-    };
+/** Drop the armed part into a cell. Stays armed, so you can place a run of them. */
+export function placeArmed(state: GameState, cell: Cell): GameState {
+  if (!state.armed) return state;
+  if (occupant(state.cells, cell) !== null) {
+    return { ...state, message: 'That cell is taken.' };
   }
 
-  const id = freshNodeId(state.circuit);
-  const nodes = new Map(state.circuit.nodes);
-  nodes.set(id, { id, kind, inputs: [...state.selection] });
+  let placed;
+  if (state.armed.kind === 'gate') {
+    placed = addGate(state.circuit, state.armed.gate);
+  } else {
+    const chip = state.registry.get(state.armed.chipId);
+    if (!chip) return { ...state, message: 'That chip does not exist.' };
+    placed = addChip(state.circuit, chip);
+  }
 
-  // Select the new gate so builds chain naturally.
+  const cells = new Map(state.cells);
+  cells.set(placed.id, cell);
+
   return {
     ...state,
-    circuit: withNodes(state.circuit, nodes),
-    selection: [id],
+    circuit: placed.circuit,
+    cells,
+    selection: [],
     message: null,
   };
 }
 
-export function placeChip(state: GameState, chipId: ChipId): GameState {
-  const chip = state.registry.get(chipId);
-  if (!chip) return { ...state, message: 'That chip does not exist.' };
+export function moveNode(state: GameState, id: NodeId, cell: Cell): GameState {
+  const taken = occupant(state.cells, cell);
+  if (taken !== null && taken !== id) return state;
 
-  if (state.selection.length !== chip.arity) {
-    return {
-      ...state,
-      message: `${chip.name} takes ${chip.arity} inputs — select exactly ${chip.arity}.`,
-    };
+  const cells = new Map(state.cells);
+  cells.set(id, cell);
+  return { ...state, cells, message: null };
+}
+
+/* ------------------------------------------------------------------ */
+/* Wiring                                                             */
+/* ------------------------------------------------------------------ */
+
+export function wire(
+  state: GameState,
+  targetId: NodeId,
+  pin: number,
+  sourceId: NodeId,
+): GameState {
+  const check = canConnect(state.circuit, targetId, pin, sourceId);
+  if (!check.ok) {
+    return { ...state, message: check.detail ?? 'That wire is not allowed.' };
   }
-
-  const id = freshNodeId(state.circuit);
-  const nodes = new Map(state.circuit.nodes);
-  nodes.set(id, { id, kind: 'CHIP', inputs: [...state.selection], chipId });
-
   return {
     ...state,
-    circuit: withNodes(state.circuit, nodes),
-    selection: [id],
+    circuit: connect(state.circuit, targetId, pin, sourceId),
+    message: null,
+  };
+}
+
+export function unwire(
+  state: GameState,
+  targetId: NodeId,
+  pin: number,
+): GameState {
+  return {
+    ...state,
+    circuit: disconnect(state.circuit, targetId, pin),
     message: null,
   };
 }
@@ -125,166 +164,55 @@ export function placeChip(state: GameState, chipId: ChipId): GameState {
 /* Removing and designating                                           */
 /* ------------------------------------------------------------------ */
 
-/**
- * Delete the selection, cascading to anything downstream.
- *
- * Cascading rather than refusing: a gate whose input vanished would be invalid,
- * and making the player unpick a branch leaf by leaf is tedious.
- */
 export function deleteSelected(state: GameState): GameState {
-  const doomed = new Set<NodeId>();
-
-  const condemn = (id: NodeId): void => {
-    if (doomed.has(id)) return;
-    doomed.add(id);
-    for (const node of state.circuit.nodes.values()) {
-      if (node.inputs.includes(id)) condemn(node.id);
-    }
-  };
-
-  let refusedInput = false;
-  for (const id of state.selection) {
-    const node = state.circuit.nodes.get(id);
-    if (!node) continue;
-    if (node.kind === 'INPUT') {
-      refusedInput = true;
-      continue;
-    }
-    condemn(id);
+  const removable = state.selection.filter(
+    (id) => state.circuit.nodes.get(id)?.kind !== 'INPUT',
+  );
+  if (removable.length === 0) {
+    return { ...state, message: 'Nothing selected that can be removed.' };
   }
 
-  if (doomed.size === 0) {
-    return {
-      ...state,
-      message: refusedInput
-        ? 'Circuit inputs cannot be deleted.'
-        : 'Nothing selected to delete.',
-    };
-  }
-
-  const nodes = new Map(state.circuit.nodes);
-  for (const id of doomed) nodes.delete(id);
-
-  const outputId =
-    state.circuit.outputId !== null && doomed.has(state.circuit.outputId)
-      ? null
-      : state.circuit.outputId;
-
-  const extra = doomed.size - state.selection.filter((id) => doomed.has(id)).length;
+  const cells = new Map(state.cells);
+  for (const id of removable) cells.delete(id);
 
   return {
     ...state,
-    circuit: withNodes(state.circuit, nodes, outputId),
+    circuit: removeNodes(state.circuit, removable),
+    cells,
     selection: [],
-    message:
-      extra > 0
-        ? `Deleted ${doomed.size} gates (${extra} downstream).`
-        : `Deleted ${doomed.size} gate${doomed.size === 1 ? '' : 's'}.`,
+    message: `Removed ${removable.length} part${removable.length === 1 ? '' : 's'}.`,
   };
 }
 
-/**
- * Dock a part as the output without going through the selection.
- *
- * Used when a part turns out to compute the target: making the player realise
- * they must separately declare an output is a dead end nobody enjoys finding.
- */
 export function dockOutput(state: GameState, id: NodeId): GameState {
-  const node = state.circuit.nodes.get(id);
-  if (!node || node.kind === 'INPUT') return state;
-  return {
-    ...state,
-    circuit: withNodes(state.circuit, new Map(state.circuit.nodes), id),
-    message: 'That part matches the target — docked it as the output.',
-  };
+  return { ...state, circuit: setCircuitOutput(state.circuit, id) };
 }
 
 export function setOutput(state: GameState): GameState {
   if (state.selection.length !== 1) {
-    return { ...state, message: 'Select exactly one gate to make it the output.' };
+    return { ...state, message: 'Select exactly one part to make it the output.' };
   }
   const id = state.selection[0];
-  const node = state.circuit.nodes.get(id);
-  if (!node || node.kind === 'INPUT') {
+  if (state.circuit.nodes.get(id)?.kind === 'INPUT') {
     return { ...state, message: 'An input cannot be the output.' };
   }
-  return {
-    ...state,
-    circuit: withNodes(state.circuit, new Map(state.circuit.nodes), id),
-    message: null,
-  };
+  return { ...state, circuit: setCircuitOutput(state.circuit, id) };
 }
 
 /* ------------------------------------------------------------------ */
-/* Merging                                                           */
+/* Merging                                                            */
 /* ------------------------------------------------------------------ */
 
-/** The live proposal for the current selection — drives the merge button. */
+/**
+ * The live proposal for the current selection.
+ *
+ * Note what this deliberately is NOT: a search of the board for merges the
+ * player has not noticed. Finding the repeat is the game. This only answers
+ * "is what you picked a legal chip?", which is feedback on a decision the
+ * player already made.
+ */
 export function currentProposal(state: GameState) {
   return proposeMerge(state.circuit, [...state.selection], state.registry);
-}
-
-/**
- * Everything feeding `id`, stopping at circuit inputs. Null if it grows past
- * `limit`, since nothing that big can become a chip anyway.
- */
-function coneOf(
-  circuit: Circuit,
-  id: NodeId,
-  limit: number,
-): NodeId[] | null {
-  const seen = new Set<NodeId>();
-  const stack: NodeId[] = [id];
-
-  while (stack.length > 0) {
-    const current = stack.pop() as NodeId;
-    if (seen.has(current)) continue;
-
-    const node = circuit.nodes.get(current);
-    if (!node || node.kind === 'INPUT') continue;
-
-    seen.add(current);
-    if (seen.size > limit) return null;
-    stack.push(...node.inputs);
-  }
-
-  return [...seen];
-}
-
-/**
- * Hunt the board for a merge the player has not spotted.
- *
- * Without this, the central mechanic is invisible: you only learn merging
- * exists if you happen to select exactly the right parts first. The scan tries
- * the cone above each part — which is what a player would select anyway — and
- * returns whichever legal merge saves the most.
- */
-export function suggestMerge(state: GameState): {
-  readonly selection: NodeId[];
-  readonly name: string;
-  readonly saved: number;
-} | null {
-  let best: { selection: NodeId[]; name: string; saved: number } | null = null;
-
-  for (const node of state.circuit.nodes.values()) {
-    if (node.kind === 'INPUT') continue;
-
-    const cone = coneOf(state.circuit, node.id, TUNING.maxChipNodes);
-    if (!cone || cone.length < 2) continue;
-
-    const proposal = proposeMerge(state.circuit, cone, state.registry);
-    if (!proposal.ok) continue;
-
-    const { name, saved } = proposal.candidate;
-    if (!best || saved > best.saved) best = { selection: cone, name, saved };
-  }
-
-  return best;
-}
-
-/** Select the parts of a suggested merge, so the player can see the shape. */
-export function selectSuggestion(state: GameState, ids: readonly NodeId[]): GameState {
-  return { ...state, selection: [...ids], message: null };
 }
 
 export function mergeSelection(state: GameState): GameState {
@@ -292,13 +220,27 @@ export function mergeSelection(state: GameState): GameState {
   if (!proposal.ok) return { ...state, message: proposal.detail };
 
   const outcome = applyMerge(state.circuit, proposal.candidate, state.registry);
-  const saved = proposal.candidate.saved;
+  const { candidate } = proposal;
+
+  /* Each new chip takes the cell of the shape it replaced, so the board keeps
+     the arrangement the player built rather than jumping around. */
+  const cells = new Map(state.cells);
+  candidate.matches.forEach((match, i) => {
+    const home = state.cells.get(match.rootId);
+    for (const id of match.nodeIds) cells.delete(id);
+    const chipNode = outcome.placedNodeIds[i];
+    if (chipNode !== undefined) {
+      cells.set(chipNode, home ?? firstFreeCell(cells) ?? { col: 0, row: 0 });
+    }
+  });
 
   return {
     ...state,
     circuit: outcome.circuit,
     registry: outcome.registry,
+    cells,
     selection: [],
-    message: `Discovered ${outcome.chip.name}. Saved ${saved} chip${saved === 1 ? '' : 's'}.`,
+    armed: null,
+    message: `Discovered ${outcome.chip.name}. Saved ${candidate.saved}.`,
   };
 }
