@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
  * you cannot configure that. Hashes work everywhere with no server config, and
  * they cost nothing here because the app is one page deep.
  */
-export const ROUTES = ['home', 'play', 'learn'] as const;
+export const ROUTES = ['home', 'play', 'duel', 'learn'] as const;
 export type Route = (typeof ROUTES)[number];
 
 function read(): Route {

@@ -1417,3 +1417,253 @@ svg.board.placing {
 svg.board.panning {
   cursor: grabbing;
 }
+
+/* ================================================================ */
+/* Duel                                                             */
+/* ================================================================ */
+
+.duel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.duel-head .who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.duel-head .handle {
+  font-weight: 700;
+}
+.duel-head .rating {
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: #eceae3;
+  color: var(--dim);
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+.net-error {
+  padding: 9px 12px;
+  border-left: 3px solid var(--bad);
+  background: #fbeceb;
+  color: #7d2620;
+  font-size: 13px;
+}
+
+.signin,
+.lobby-block {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.signin h2,
+.lobby-block h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.signin-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.signin-row input {
+  padding: 9px 11px;
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  background: var(--panel);
+  font-size: 14px;
+  min-width: 180px;
+}
+
+ul.lobby-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ul.lobby-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rule);
+}
+ul.lobby-list li.turn {
+  background: #f2fbf5;
+}
+ul.lobby-list .lname {
+  font-weight: 700;
+  font-size: 14px;
+}
+ul.lobby-list .lmeta {
+  color: var(--dim);
+  font-size: 12.5px;
+}
+ul.lobby-list button {
+  margin-left: auto;
+}
+
+/* ---- the duel board ---- */
+
+.duel-game {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.duel-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--panel);
+  font-size: 13px;
+}
+
+.duel-bar .seats {
+  display: flex;
+  gap: 8px;
+}
+.duel-bar .seat {
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  color: var(--dim);
+}
+.duel-bar .seat.active {
+  border-color: var(--stroke);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+}
+
+.duel-bar .budget {
+  margin-left: auto;
+  color: var(--dim);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+.duel-bar .whose {
+  font-weight: 700;
+  color: var(--dim);
+}
+.duel-bar .whose.mine {
+  color: var(--on);
+}
+
+.duel-body {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 260px;
+  gap: 12px;
+  align-items: start;
+}
+
+.duel-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.duel-tools h3 {
+  margin: 4px 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.duel-tools button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--stroke);
+  border-radius: 3px;
+  background: var(--panel);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.duel-tools button em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.duel-tools button:disabled {
+  border-color: var(--rule);
+  color: var(--faint);
+  cursor: not-allowed;
+}
+.duel-tools button.armed {
+  border-color: var(--sel);
+  background: #e7f0fb;
+  color: var(--sel);
+}
+.duel-tools button.ready {
+  border-color: var(--on);
+  background: #e7f6ec;
+  color: #14663a;
+}
+.duel-tools button.danger:not(:disabled) {
+  color: var(--bad);
+}
+
+.duel-game .board-scroll {
+  height: 560px;
+}
+
+.duel-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.duel-side .ply {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+ol.movelist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12.5px;
+}
+ol.movelist li {
+  display: flex;
+  gap: 9px;
+  padding: 3px 0;
+  border-top: 1px solid var(--rule);
+}
+ol.movelist .mno {
+  width: 22px;
+  color: var(--faint);
+  font-family: ui-monospace, monospace;
+  text-align: right;
+}
+ol.movelist li.p1 {
+  color: var(--dim);
+}

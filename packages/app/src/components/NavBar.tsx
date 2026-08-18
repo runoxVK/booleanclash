@@ -25,6 +25,7 @@ export function NavBar({ route, onNavigate, solved, total }: NavBarProps) {
       </button>
       <div className="nav-tabs">
         {tab('play', 'Play')}
+        {tab('duel', 'Duel')}
         {tab('learn', 'Learn')}
       </div>
       <span className="nav-progress">

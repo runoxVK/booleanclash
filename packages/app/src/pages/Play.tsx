@@ -32,6 +32,9 @@ const UNDO_LIMIT = 60;
 const SEEN_HELP_KEY = 'logiclash.seenHelp.v1';
 
 interface PlayProps {
+  /** False while another page is showing. Play stays mounted to keep the
+      circuit, but its shortcuts must not fire from under other pages. */
+  readonly active: boolean;
   readonly progress: Progress;
   readonly onProgress: (next: Progress) => void;
   /** A puzzle requested from elsewhere in the site. The ticket changes even
@@ -39,7 +42,7 @@ interface PlayProps {
   readonly request: { readonly id: string; readonly ticket: number } | null;
 }
 
-export function Play({ progress, onProgress, request }: PlayProps) {
+export function Play({ active, progress, onProgress, request }: PlayProps) {
   const [state, setState] = useState<GameState>(() => newGame(OPENING_PUZZLE));
   const [past, setPast] = useState<GameState[]>([]);
   const [inputBits, setInputBits] = useState<boolean[]>(() =>
@@ -159,8 +162,25 @@ export function Play({ progress, onProgress, request }: PlayProps) {
   }, [solved, state.puzzle.id, breakdown.total, progress, onProgress]);
 
   useEffect(() => {
+    if (!active) return;
+
     const onKey = (event: KeyboardEvent) => {
       if (event.altKey) return;
+
+      /* Never steal a keystroke from a text field. These shortcuts are bare
+         letters, so without this check typing a handle anywhere in the site
+         loses every a, o, n, m, u and f to the board. */
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT')
+      ) {
+        return;
+      }
+
       const key = event.key.toLowerCase();
 
       if ((event.metaKey || event.ctrlKey) && key === 'z') {

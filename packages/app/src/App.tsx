@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavBar } from './components/NavBar';
 import { Home } from './pages/Home';
+import { Duel } from './pages/Duel';
 import { Learn } from './pages/Learn';
 import { Play } from './pages/Play';
 import { loadProgress, type Progress } from './progress';
@@ -45,9 +46,15 @@ export function App() {
             onPlayPuzzle={playPuzzle}
           />
         )}
+        {route === 'duel' && <Duel />}
         {route === 'learn' && <Learn onNavigate={go} />}
         <div className="play-host" hidden={route !== 'play'}>
-          <Play progress={progress} onProgress={setProgress} request={request} />
+          <Play
+            active={route === 'play'}
+            progress={progress}
+            onProgress={setProgress}
+            request={request}
+          />
         </div>
       </div>
     </div>
