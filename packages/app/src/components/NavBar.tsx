@@ -24,7 +24,8 @@ export function NavBar({ route, onNavigate, solved, total }: NavBarProps) {
         LOGICLASH
       </button>
       <div className="nav-tabs">
-        {tab('play', 'Play')}
+        {tab('play', 'Solo')}
+        {tab('race', 'Race')}
         {tab('duel', 'Duel')}
         {tab('learn', 'Learn')}
       </div>

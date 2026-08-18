@@ -12,8 +12,17 @@ import type { DuelMove, DuelResult } from '@logiclash/engine';
  * first thing to replace before this faces the public internet.
  */
 
+/**
+ * Where the API lives.
+ *
+ * In production the server serves this bundle itself, so an empty base means
+ * same-origin — which is what makes the whole thing shareable as one URL, with
+ * no CORS and nothing to configure. In dev the app runs on Vite's port while the
+ * API runs on its own, so point at it explicitly. VITE_SERVER overrides both.
+ */
 const BASE: string =
-  (import.meta.env.VITE_SERVER as string | undefined) ?? 'http://localhost:8787';
+  (import.meta.env.VITE_SERVER as string | undefined) ??
+  (import.meta.env.DEV ? 'http://localhost:8787' : '');
 
 const TOKEN_KEY = 'logiclash.token.v1';
 
@@ -130,6 +139,54 @@ export interface GameView {
   readonly updatedAt: number;
 }
 
+export interface RaceSeek {
+  readonly id: string;
+  readonly inputCount: number;
+  readonly timeLimitMs: number;
+  readonly createdAt: number;
+  readonly player: {
+    readonly id: string;
+    readonly handle: string;
+    readonly rating: number;
+  };
+}
+
+export type RaceResult =
+  | {
+      readonly kind: 'win';
+      readonly winner: 0 | 1;
+      readonly reason: 'fewer-parts' | 'faster' | 'only-solver' | 'closer';
+    }
+  | { readonly kind: 'draw'; readonly reason: 'identical' | 'neither-solved' };
+
+export interface RaceSide {
+  readonly score: number | null;
+  readonly solvedAt: number | null;
+  /** Rows of the target matched — the tiebreak if the clock runs out. */
+  readonly close: number;
+  /** Your own always; the opponent's only once the race is over. */
+  readonly circuit: unknown | null;
+}
+
+export interface RaceView {
+  readonly id: string;
+  readonly kind: 'race';
+  readonly players: readonly {
+    readonly id: string;
+    readonly handle: string;
+    readonly rating: number;
+  }[];
+  readonly seat: 0 | 1;
+  readonly puzzle: { readonly inputCount: number; readonly target: string };
+  readonly par: number;
+  readonly timeLimitMs: number;
+  readonly startedAt: number;
+  readonly msLeft: number;
+  readonly you: RaceSide;
+  readonly opponent: RaceSide;
+  readonly result: RaceResult | null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Calls                                                              */
 /* ------------------------------------------------------------------ */
@@ -184,5 +241,39 @@ export const net = {
       move,
       expectedPly,
     });
+  },
+
+  /* ---- races: separate boards, one clock ---- */
+
+  listRaceSeeks(): Promise<RaceSeek[]> {
+    return request<RaceSeek[]>('GET', '/api/race-seeks');
+  },
+
+  createRaceSeek(inputCount: number, timeLimitMs: number): Promise<{ id: string }> {
+    return request<{ id: string }>('POST', '/api/race-seeks', {
+      inputCount,
+      timeLimitMs,
+    });
+  },
+
+  cancelRaceSeek(id: string): Promise<unknown> {
+    return request('DELETE', `/api/race-seeks/${id}`);
+  },
+
+  acceptRaceSeek(id: string): Promise<RaceView> {
+    return request<RaceView>('POST', `/api/race-seeks/${id}/accept`);
+  },
+
+  myRaces(): Promise<RaceView[]> {
+    return request<RaceView[]>('GET', '/api/races');
+  },
+
+  getRace(id: string): Promise<RaceView> {
+    return request<RaceView>('GET', `/api/races/${id}`);
+  },
+
+  /** Record the circuit as it stands. The server scores it, not the client. */
+  submitRace(id: string, circuit: unknown): Promise<RaceView> {
+    return request<RaceView>('POST', `/api/races/${id}/submit`, { circuit });
   },
 };

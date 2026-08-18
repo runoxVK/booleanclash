@@ -1,4 +1,6 @@
+import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import * as api from './api.js';
 import * as race from './race.js';
 import { ApiError } from './api.js';
@@ -16,6 +18,72 @@ import { openDatabase } from './db.js';
  */
 
 const PORT = Number(process.env.PORT ?? 8787);
+const HOST = process.env.HOST ?? '0.0.0.0';
+
+/**
+ * Where the built client lives, if it has been built.
+ *
+ * Serving the app from the same process is what makes this shareable: one URL,
+ * one origin, no CORS, nothing for a friend to configure. Without a build the
+ * server is still a plain API and the dev server handles the UI.
+ */
+const CLIENT_DIR = resolve(
+  process.env.CLIENT_DIR ?? 'packages/app/dist',
+);
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+/**
+ * Serve a file from the built client. Returns false if there is nothing to send,
+ * so the caller can fall through to the API's own 404.
+ *
+ * Paths are normalised and confined to CLIENT_DIR: a request for
+ * ../../etc/passwd must not escape, and this is reachable from the internet.
+ */
+async function serveClient(
+  req: IncomingMessage,
+  res: ServerResponse,
+  path: string,
+): Promise<boolean> {
+  const wanted = path === '/' ? '/index.html' : path;
+  const full = join(CLIENT_DIR, normalize(wanted));
+  if (full !== CLIENT_DIR && !full.startsWith(CLIENT_DIR + sep)) return false;
+
+  let body: Buffer;
+  try {
+    const info = await stat(full);
+    if (!info.isFile()) return false;
+    body = await readFile(full);
+  } catch {
+    return false;
+  }
+
+  const type = MIME[extname(full).toLowerCase()] ?? 'application/octet-stream';
+  /* Vite fingerprints asset filenames, so those are safe to cache hard; the
+     entry HTML must never be, or a deploy will not reach anyone. */
+  const cache = full.includes(`${sep}assets${sep}`)
+    ? 'public, max-age=31536000, immutable'
+    : 'no-cache';
+
+  res.writeHead(200, {
+    'content-type': type,
+    'content-length': body.byteLength,
+    'cache-control': cache,
+  });
+  res.end(req.method === 'HEAD' ? undefined : body);
+  return true;
+}
 const DB_FILE = process.env.DB_FILE ?? 'logiclash.db';
 const db = openDatabase(DB_FILE);
 
@@ -187,6 +255,12 @@ const server = createServer((req, res) => {
 
     const path = (req.url ?? '/').split('?')[0];
 
+    /* The built client, when there is one. Checked before the API index so that
+       visiting the root gets the game rather than a list of endpoints. */
+    if ((req.method === 'GET' || req.method === 'HEAD') && !path.startsWith('/api')) {
+      if (await serveClient(req, res, path)) return;
+    }
+
     if (req.method === 'GET' && (path === '/' || path === '/api')) {
       const accept = req.headers.accept ?? '';
       sendIndex(res, accept.includes('text/html'));
@@ -225,6 +299,6 @@ const server = createServer((req, res) => {
   })();
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`Logiclash server on http://localhost:${PORT}  (db: ${DB_FILE})`);
 });

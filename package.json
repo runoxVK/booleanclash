@@ -16,7 +16,8 @@
     "preview": "npm run preview -w @logiclash/app",
     "play": "tsx scripts/play.ts",
     "survey": "tsx scripts/survey.ts",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run test",
+    "share": "npm run build && npm run server"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

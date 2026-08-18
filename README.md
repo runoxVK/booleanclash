@@ -129,6 +129,63 @@ Chip identity is **behavioural, not structural** — same arity + same truth tab
 means same chip, however it was wired. That is what powers "you discovered XOR"
 and prevents hoarding variants.
 
+## Playing against friends
+
+The server serves the built client itself, so the whole game is **one process on
+one port** — no CORS, nothing for a friend to configure, and one URL to send.
+
+```bash
+npm run share
+```
+
+That builds the client and starts the server on port 8787. Then pick a way to let
+people reach it:
+
+**Same room, same wifi** — the easiest. The server listens on all interfaces, so
+give them your machine's LAN address:
+
+```bash
+ipconfig
+```
+
+Send them `http://<your-IPv4-address>:8787`. Nothing to install.
+
+**Anywhere else** — a tunnel gives you a public HTTPS URL pointing at your
+machine. It lives as long as the command runs:
+
+```bash
+cloudflared tunnel --url http://localhost:8787
+```
+
+It prints a `https://something.trycloudflare.com` address; that is the link to
+send. No account needed. If you would rather not install anything:
+
+```bash
+npx localtunnel --port 8787
+```
+
+Either way, everyone opens the link, picks a handle, and goes to **Race**. One
+person posts a challenge, the other accepts.
+
+### Before this goes on a real domain
+
+Two things are deliberately thin and both need doing before `booleanclash.com`
+points at it:
+
+- **There is no real authentication.** A handle gets you a token, and any unused
+  handle is claimable by anyone. Fine among friends; not fine in public.
+- **The database is a local sqlite file.** It survives restarts, but hosting the
+  server somewhere permanent means giving that file a persistent disk.
+
+## Modes
+
+| | |
+|---|---|
+| **Solo** | The campaign. Fifteen puzzles, best scores kept locally. |
+| **Race** | Same puzzle, separate boards, one clock. Fewest parts wins; circuits stay hidden until it ends, then both are revealed. |
+| **Duel** | One shared board, alternating turns, win by completing the target on your own turn. The chess-like variant. |
+| **Learn** | Lessons from zero, plus checked outside reading. |
+
 ## Roadmap
 
 | | |
