@@ -89,9 +89,14 @@ export function Board({
     box.h > 0 ? box.h / scale : 0,
   );
 
-  const canvasW = Math.max(box.w, width * scale);
-  const canvasH = Math.max(box.h, height * scale);
-  const offsetX = (canvasW - width * scale) / 2;
+  /* The SVG keeps a fixed CSS size and expresses zoom through the viewBox
+     instead. Changing an SVG's intrinsic width/height every render leaves the
+     browser repainting stale copies of the previous, larger frame, and it can
+     oscillate against its own scrollbar: grow, scrollbar appears, container
+     shrinks, shrink, scrollbar goes, repeat. */
+  const viewW = Math.max(width, box.w > 0 ? box.w / scale : width);
+  const viewH = Math.max(height, box.h > 0 ? box.h / scale : height);
+  const offsetX = (viewW - width) / 2;
 
   const bitOf = (id: NodeId): number | null => {
     const value = values.get(id);
@@ -134,10 +139,14 @@ export function Board({
 
   return (
     <div className="board-scroll" ref={pane}>
-      <svg className="board" width={canvasW} height={canvasH}>
-        <rect className="canvas" x={0} y={0} width={canvasW} height={canvasH} />
+      <svg
+        className="board"
+        viewBox={`0 0 ${viewW} ${viewH}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <rect className="canvas" x={0} y={0} width={viewW} height={viewH} />
 
-        <g transform={`translate(${offsetX} 0) scale(${scale})`}>
+        <g transform={`translate(${offsetX} 0)`}>
         {outSource && (
           <path
             className={`wire${outBit === 1 ? ' hot' : ''}`}

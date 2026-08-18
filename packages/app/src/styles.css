@@ -651,13 +651,16 @@ table.truth tr.probed td.in {
 .board-scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  /* hidden, not auto: the viewBox already fits the circuit to the pane, and a
+     scrollbar appearing would resize the pane that sized the viewBox. */
+  overflow: hidden;
   border-radius: 4px;
 }
 
 svg.board {
   display: block;
-  min-width: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .canvas {
