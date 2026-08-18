@@ -1667,3 +1667,19 @@ ol.movelist .mno {
 ol.movelist li.p1 {
   color: var(--dim);
 }
+
+.why.ready {
+  border-left-color: var(--on);
+  background: #eefaf2;
+  color: #14663a;
+}
+
+.waiting-note {
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--faint);
+  background: #f2f1ec;
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+}

@@ -25,7 +25,7 @@ import type { Cell } from '../grid';
 import type { Tool } from '../game';
 
 /** How often to ask again while waiting for the opponent. */
-const POLL_MS = 3000;
+const POLL_MS = 1500;
 
 type Screen =
   | { readonly kind: 'signIn' }
@@ -347,6 +347,11 @@ function GameScreen({
   const [armed, setArmed] = useState<Tool | null>(null);
   const [inputBits, setInputBits] = useState<boolean[]>([]);
   const [busy, setBusy] = useState(false);
+  /* A cell chosen before the inputs were picked. Placement needs a gate, its
+     inputs and a cell; insisting on one particular order is a trap, so either
+     order works and the move fires once all three are known. */
+  const [pendingCell, setPendingCell] = useState<Cell | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -422,6 +427,8 @@ function GameScreen({
       setView(await net.postMove(gameId, move, view.ply));
       setSelection([]);
       setArmed(null);
+      setPendingCell(null);
+      setNotice(null);
     } catch (e) {
       // A rejected move usually means the board moved under us; refetch so the
       // player sees the real position rather than arguing with a stale one.
@@ -429,6 +436,50 @@ function GameScreen({
       await load();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const attemptPlace = (cell: Cell) => {
+    if (armed === null) {
+      setNotice('Pick a part from the left first.');
+      return;
+    }
+    if (selection.length !== arity) {
+      setPendingCell(cell);
+      const missing = arity - selection.length;
+      setNotice(
+        missing > 0
+          ? `Cell chosen. Now click ${missing} signal${missing === 1 ? '' : 's'} to feed it.`
+          : `That part takes ${arity}; you have ${selection.length} selected.`,
+      );
+      return;
+    }
+    void send(
+      armed.kind === 'gate'
+        ? { kind: 'place', gate: armed.gate, cell, inputs: [...selection] }
+        : { kind: 'place-chip', chipId: armed.chipId, cell, inputs: [...selection] },
+    );
+  };
+
+  const chooseSignal = (id: NodeId) => {
+    const next = selection.includes(id)
+      ? selection.filter((s) => s !== id)
+      : [...selection, id];
+    setSelection(next);
+    setNotice(null);
+
+    // If a cell is already waiting and this completes the pin count, go.
+    if (armed !== null && pendingCell !== null && next.length === arity) {
+      void send(
+        armed.kind === 'gate'
+          ? { kind: 'place', gate: armed.gate, cell: pendingCell, inputs: next }
+          : {
+              kind: 'place-chip',
+              chipId: armed.chipId,
+              cell: pendingCell,
+              inputs: next,
+            },
+      );
     }
   };
 
@@ -490,10 +541,24 @@ function GameScreen({
 
       <div className="duel-body">
         <div className="duel-tools">
+          {/* When the board is not yours, say so here rather than only in the
+              bar above — a column of dead buttons with no explanation reads as
+              a broken game. */}
+          {!myTurn && !state.result && (
+            <p className="waiting-note">
+              Waiting for{' '}
+              <strong>{view.players[state.turn]?.handle ?? 'your opponent'}</strong>.
+              Nothing is clickable until they move.
+            </p>
+          )}
+          {state.result && (
+            <p className="waiting-note">This game is over.</p>
+          )}
+
           <h3>Place</h3>
           <p className="aside">
-            Pick a part, click the signals feeding it, then click an empty cell.
-            That whole sequence is one move.
+            Pick a part, click the signals feeding it, then click an empty cell —
+            in either order. The whole sequence is one move.
           </p>
           {(['NOT', 'AND', 'OR'] as const).map((gate) => (
             <button
@@ -561,12 +626,15 @@ function GameScreen({
           </button>
 
           {armed && (
-            <p className="aside">
+            <p className={readyToPlace ? 'why ready' : 'why'}>
               {readyToPlace
-                ? 'Now click an empty cell.'
-                : `Select ${arity - selection.length} more signal${arity - selection.length === 1 ? '' : 's'}.`}
+                ? pendingCell
+                  ? 'Sending…'
+                  : 'Now click an empty cell.'
+                : `Click ${arity - selection.length} more signal${arity - selection.length === 1 ? '' : 's'} on the board${pendingCell ? ' — the cell is already chosen.' : ', then an empty cell.'}`}
             </p>
           )}
+          {notice && <p className="message">{notice}</p>}
           {!packageProposal.ok && selection.length > 1 && !armed && (
             <p className="why">{packageProposal.detail}</p>
           )}
@@ -582,26 +650,8 @@ function GameScreen({
           selectionPackages={packageProposal.ok}
           target={target}
           probeRow={probeRow}
-          onSelect={(id) =>
-            setSelection((current) =>
-              current.includes(id)
-                ? current.filter((s) => s !== id)
-                : [...current, id],
-            )
-          }
-          onPlace={(cell: Cell) => {
-            if (!readyToPlace || armed === null) return;
-            void send(
-              armed.kind === 'gate'
-                ? { kind: 'place', gate: armed.gate, cell, inputs: [...selection] }
-                : {
-                    kind: 'place-chip',
-                    chipId: armed.chipId,
-                    cell,
-                    inputs: [...selection],
-                  },
-            );
-          }}
+          onSelect={chooseSignal}
+          onPlace={attemptPlace}
           onMove={() => {
             /* Shuffling a part around is not a move in the duel. */
           }}
