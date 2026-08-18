@@ -48,6 +48,8 @@ interface BoardProps {
   readonly armed: Tool | null;
   /** True when the current selection adds up to a component. */
   readonly selectionPackages: boolean;
+  /** Ring every part the player could pick as an input right now. */
+  readonly highlightSignals?: boolean;
   readonly target: bigint;
   readonly probeRow: number;
   readonly onSelect: (id: NodeId) => void;
@@ -126,6 +128,7 @@ export function Board({
   selection,
   armed,
   selectionPackages,
+  highlightSignals = false,
   target,
   probeRow,
   onSelect,
@@ -249,11 +252,20 @@ export function Board({
   const finishBackgroundClick = (event: ReactPointerEvent) => {
     const { x, y } = toBoard(event);
     const cell = cellAtPoint(x, y);
-    if (armed && cell && occupant(cells, cell) === null) {
+    const sitting = cell ? occupant(cells, cell) : null;
+
+    /* Clicked an occupied cell but missed the part's rounded rectangle, which is
+       smaller than the cell. Aiming at the cell means aiming at the part —
+       previously this landed in a dead zone and did nothing whatsoever. */
+    if (sitting !== null) {
+      onSelect(sitting);
+      return;
+    }
+    if (armed && cell) {
       onPlace(cell);
       return;
     }
-    if (!cell || occupant(cells, cell) === null) onBackground();
+    onBackground();
   };
 
   const onPointerMove = (event: ReactPointerEvent) => {
@@ -483,6 +495,7 @@ export function Board({
 
           const classes = ['part', `kind-${node.kind.toLowerCase()}`];
           if (order !== undefined) classes.push('selected');
+          if (highlightSignals && order === undefined) classes.push('choosable');
           if (order !== undefined && selectionPackages) classes.push('packages');
           if (value !== undefined && value === target) classes.push('matches');
           if (circuit.outputId === node.id) classes.push('is-output');

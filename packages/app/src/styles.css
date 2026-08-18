@@ -1683,3 +1683,19 @@ ol.movelist li.p1 {
   font-size: 11.5px;
   line-height: 1.45;
 }
+
+/* While a placement is waiting on inputs, ring everything that could be one. */
+.part.choosable .body {
+  stroke: var(--sel);
+  stroke-dasharray: 5 3;
+}
+
+.chosen {
+  margin: 2px 0 0;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+.chosen .of {
+  color: var(--faint);
+}

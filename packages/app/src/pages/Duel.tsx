@@ -626,6 +626,31 @@ function GameScreen({
           </button>
 
           {armed && (
+            <p className="chosen">
+              inputs:{' '}
+              {selection.length === 0
+                ? '—'
+                : selection
+                    .map((id) => {
+                      const node = state.circuit.nodes.get(id);
+                      if (!node) return '?';
+                      if (node.kind === 'INPUT') {
+                        return 'abcdefgh'[node.inputIndex ?? 0];
+                      }
+                      if (node.kind === 'CHIP') {
+                        return node.chipId
+                          ? state.registry.get(node.chipId)?.name ?? 'chip'
+                          : 'chip';
+                      }
+                      return node.kind.toLowerCase();
+                    })
+                    .join(', ')}{' '}
+              <span className="of">
+                ({selection.length} of {arity})
+              </span>
+            </p>
+          )}
+          {armed && (
             <p className={readyToPlace ? 'why ready' : 'why'}>
               {readyToPlace
                 ? pendingCell
@@ -648,6 +673,7 @@ function GameScreen({
           selection={selection}
           armed={armed}
           selectionPackages={packageProposal.ok}
+          highlightSignals={myTurn && armed !== null && selection.length < arity}
           target={target}
           probeRow={probeRow}
           onSelect={chooseSignal}
