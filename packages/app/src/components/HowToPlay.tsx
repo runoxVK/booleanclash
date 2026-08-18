@@ -25,6 +25,11 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             can feed as many pins as you like, for free.
           </li>
           <li>
+            <strong>Room to work.</strong> The grid is bigger than the screen.
+            Scroll to zoom, drag empty board to pan, and the{' '}
+            <strong>%</strong> button snaps back to the whole board.
+          </li>
+          <li>
             <strong>Flip the switches</strong> under the inputs to watch signals
             travel up the board. Live wires light up green. Clicking a row of the
             table throws the switches to match that row.

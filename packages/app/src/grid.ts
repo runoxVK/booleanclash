@@ -10,8 +10,11 @@ import type { NodeId } from '@logiclash/engine';
  * is not cosmetic — it is the main tool for playing well.
  */
 
-export const COLS = 9;
-export const ROWS = 7;
+/* Roomier than fits comfortably on screen at 1:1 — the board zooms and pans,
+   so the grid is sized for the circuits people actually build rather than for
+   what fits in one glance. */
+export const COLS = 11;
+export const ROWS = 8;
 
 export const CELL_W = 104;
 export const CELL_H = 78;

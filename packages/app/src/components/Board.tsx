@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -32,6 +33,11 @@ const PIN_LABELS = ['a', 'b', 'c', 'd'];
 const SNAP = 26;
 /** Movement beyond this turns a click into a drag. */
 const DRAG_SLOP = 5;
+
+/** How far in and out the board will go, as a multiple of the whole grid. */
+const MIN_VIEW = 0.25;
+const MAX_VIEW = 1.35;
+const WHEEL_STEP = 1.12;
 
 interface BoardProps {
   readonly circuit: Circuit;
@@ -69,7 +75,24 @@ type Drag =
       readonly x: number;
       readonly y: number;
     }
+  | {
+      /* Panning tracks client pixels, not board units: board units depend on
+         the very viewBox we are changing, which would feed back on itself. */
+      readonly kind: 'pan';
+      readonly clientX: number;
+      readonly clientY: number;
+      readonly moved: boolean;
+    }
   | null;
+
+interface View {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+const WHOLE_BOARD: View = { x: 0, y: 0, w: BOARD_W, h: BOARD_H };
 
 function labelFor(circuit: Circuit, registry: ChipRegistry, id: NodeId): string {
   const node = circuit.nodes.get(id);
@@ -116,6 +139,28 @@ export function Board({
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<Drag>(null);
   const [hover, setHover] = useState<Cell | null>(null);
+  const [view, setView] = useState<View>(WHOLE_BOARD);
+
+  /** Zoom about a fixed board point, so what is under the cursor stays put. */
+  const zoomAbout = (factor: number, atX: number, atY: number) => {
+    setView((current) => {
+      const wanted = current.w * factor;
+      const w = Math.min(
+        BOARD_W * MAX_VIEW,
+        Math.max(BOARD_W * MIN_VIEW, wanted),
+      );
+      const scale = w / current.w;
+      return {
+        w,
+        h: current.h * scale,
+        x: atX - (atX - current.x) * scale,
+        y: atY - (atY - current.y) * scale,
+      };
+    });
+  };
+
+  const zoomCentre = (factor: number) =>
+    zoomAbout(factor, view.x + view.w / 2, view.y + view.h / 2);
 
   const selectionIndex = new Map(selection.map((id, i) => [id, i + 1]));
 
@@ -184,8 +229,24 @@ export function Board({
     }
   };
 
+  /* A press on the background is ambiguous until it either moves (pan) or does
+     not (place / clear), the same click-versus-drag test parts use. */
   const onSurfacePointerDown = (event: ReactPointerEvent) => {
     event.preventDefault();
+    try {
+      svgRef.current?.setPointerCapture(event.pointerId);
+    } catch {
+      // Not capturable; panning still works while the cursor stays inside.
+    }
+    setDrag({
+      kind: 'pan',
+      clientX: event.clientX,
+      clientY: event.clientY,
+      moved: false,
+    });
+  };
+
+  const finishBackgroundClick = (event: ReactPointerEvent) => {
     const { x, y } = toBoard(event);
     const cell = cellAtPoint(x, y);
     if (armed && cell && occupant(cells, cell) === null) {
@@ -206,9 +267,29 @@ export function Board({
         Math.abs(x - drag.originX) > DRAG_SLOP ||
         Math.abs(y - drag.originY) > DRAG_SLOP;
       setDrag({ ...drag, x, y, moved });
-    } else {
-      setDrag({ ...drag, x, y });
+      return;
     }
+
+    if (drag.kind === 'pan') {
+      const rect = svgRef.current?.getBoundingClientRect();
+      if (!rect || rect.width === 0) return;
+      const perPixel = view.w / rect.width;
+      const dx = (event.clientX - drag.clientX) * perPixel;
+      const dy = (event.clientY - drag.clientY) * perPixel;
+      setView((v) => ({ ...v, x: v.x - dx, y: v.y - dy }));
+      setDrag({
+        kind: 'pan',
+        clientX: event.clientX,
+        clientY: event.clientY,
+        moved:
+          drag.moved ||
+          Math.abs(dx) > DRAG_SLOP * perPixel ||
+          Math.abs(dy) > DRAG_SLOP * perPixel,
+      });
+      return;
+    }
+
+    setDrag({ ...drag, x, y });
   };
 
   const onPointerUp = (event: ReactPointerEvent) => {
@@ -221,6 +302,12 @@ export function Board({
     }
     if (!drag) return;
     const { x, y } = toBoard(event);
+
+    if (drag.kind === 'pan') {
+      if (!drag.moved) finishBackgroundClick(event);
+      setDrag(null);
+      return;
+    }
 
     if (drag.kind === 'move') {
       // A press that never moved is a click, and a click selects.
@@ -238,6 +325,22 @@ export function Board({
     }
     setDrag(null);
   };
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      const at = new DOMPoint(event.clientX, event.clientY).matrixTransform(
+        ctm.inverse(),
+      );
+      zoomAbout(event.deltaY > 0 ? WHEEL_STEP : 1 / WHEEL_STEP, at.x, at.y);
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, []);
 
   /* ---------------- geometry ---------------- */
 
@@ -266,12 +369,29 @@ export function Board({
   const dragSourceCell =
     drag?.kind === 'wire' ? cells.get(drag.sourceId) : undefined;
 
+  const zoomPercent = Math.round((BOARD_W / view.w) * 100);
+
   return (
     <div className="board-scroll">
+      <div className="zoom-controls">
+        <button onClick={() => zoomCentre(1 / WHEEL_STEP)} title="Zoom in">
+          +
+        </button>
+        <button onClick={() => zoomCentre(WHEEL_STEP)} title="Zoom out">
+          &minus;
+        </button>
+        <button
+          className="fit"
+          onClick={() => setView(WHOLE_BOARD)}
+          title="Fit the whole board"
+        >
+          {zoomPercent}%
+        </button>
+      </div>
       <svg
         ref={svgRef}
-        className={`board${armed ? ' placing' : ''}`}
-        viewBox={`0 0 ${BOARD_W} ${BOARD_H}`}
+        className={`board${armed ? ' placing' : ''}${drag?.kind === 'pan' && drag.moved ? ' panning' : ''}`}
+        viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
         onPointerDown={onSurfacePointerDown}
         onPointerMove={onPointerMove}
