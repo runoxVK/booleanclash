@@ -399,15 +399,23 @@ function RaceBoard({
 
   /* Send the circuit shortly after editing stops, and let the server score it.
      Submitting as you go keeps the closeness tiebreak honest and means a
-     dropped connection does not lose the work. */
+     dropped connection does not lose the work.
+
+     Note what is NOT in the dependency list: msLeft. The clock ticks four times
+     a second, and depending on it tore down the pending timer on every tick, so
+     the debounce never elapsed and nothing was ever submitted. Deadline is read
+     from the race's own fields instead. */
   const lastSent = useRef<string>('');
+  const solvedRef = useRef(false);
+
   useEffect(() => {
-    if (!state || !race || race.result !== null || msLeft <= 0) return;
+    if (!state || !race || race.result !== null) return;
+    if (Date.now() >= race.startedAt + race.timeLimitMs) return;
 
     const payload = JSON.stringify(toWire(state.circuit, state.registry));
     if (payload === lastSent.current) return;
 
-    const timer = setTimeout(() => {
+    const send = () => {
       lastSent.current = payload;
       void net
         .submitRace(raceId, JSON.parse(payload))
@@ -416,10 +424,26 @@ function RaceBoard({
           setMsLeft(view.msLeft);
         })
         .catch((e: Error) => onError(e.message));
-    }, SUBMIT_DEBOUNCE_MS);
+    };
 
+    // A solve goes immediately: waiting nearly a second to bank it could lose a
+    // race that was won.
+    if (solvedRef.current) {
+      send();
+      return;
+    }
+
+    const timer = setTimeout(send, SUBMIT_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [state, race, raceId, msLeft, onError]);
+  }, [
+    state,
+    raceId,
+    onError,
+    race?.result,
+    race?.startedAt,
+    race?.timeLimitMs,
+    race,
+  ]);
 
   const values = useMemo(
     () =>
@@ -472,7 +496,14 @@ function RaceBoard({
   const solved =
     state.circuit.outputId !== null &&
     values.get(state.circuit.outputId) === target;
+  solvedRef.current = solved;
   const low = msLeft <= 15_000;
+  const frozen = race.result !== null || msLeft <= 0;
+  /* Every edit goes through this, so nothing can change after time is up. */
+  const edit = (change: (s: GameState) => GameState) => {
+    if (frozen) return;
+    setState((s) => (s ? change(s) : s));
+  };
 
   const verdict = () => {
     if (!race.result) return null;
@@ -521,7 +552,9 @@ function RaceBoard({
           </span>
         </span>
         <span className={`whose${solved ? ' mine' : ''}`}>
-          {race.result
+          {frozen && !race.result
+            ? 'Time up — waiting for the result'
+            : race.result
             ? verdict()
             : solved
               ? `Solved in ${breakdown.total} — can you trim it?`
@@ -538,10 +571,10 @@ function RaceBoard({
 
       <div className="duel-body">
         <Toolbox
-          chips={[...state.registry.values()]}
+          chips={frozen ? [] : [...state.registry.values()]}
           armed={state.armed}
-          onArm={(tool) => setState((s) => (s ? arm(s, tool) : s))}
-          onTrash={() => setState((s) => (s ? deleteSelected(s) : s))}
+          onArm={(tool) => edit((s) => arm(s, tool))}
+          onTrash={() => edit(deleteSelected)}
         />
 
         <Board
@@ -554,15 +587,15 @@ function RaceBoard({
           selectionPackages={proposal.ok}
           target={target}
           probeRow={probeRow}
-          onSelect={(id) => setState((s) => (s ? toggleSelect(s, id) : s))}
-          onPlace={(cell: Cell) => setState((s) => (s ? placeArmed(s, cell) : s))}
-          onMove={(id, cell) => setState((s) => (s ? moveNode(s, id, cell) : s))}
-          onWire={(t, pin, src) => setState((s) => (s ? wire(s, t, pin, src) : s))}
-          onUnwire={(t, pin) => setState((s) => (s ? unwire(s, t, pin) : s))}
+          onSelect={(id) => edit((s) => toggleSelect(s, id))}
+          onPlace={(cell: Cell) => edit((s) => placeArmed(s, cell))}
+          onMove={(id, cell) => edit((s) => moveNode(s, id, cell))}
+          onWire={(t, pin, src) => edit((s) => wire(s, t, pin, src))}
+          onUnwire={(t, pin) => edit((s) => unwire(s, t, pin))}
           onFlipInput={(index) =>
             setInputBits((bits) => bits.map((on, i) => (i === index ? !on : on)))
           }
-          onBackground={() => setState((s) => (s ? clearSelection(s) : s))}
+          onBackground={() => edit(clearSelection)}
         />
 
         <div className="duel-side">
@@ -580,14 +613,14 @@ function RaceBoard({
               <button
                 className={proposal.ok ? 'merge ready' : 'merge'}
                 disabled={!proposal.ok}
-                onClick={() => setState((s) => (s ? mergeSelection(s) : s))}
+                onClick={() => edit(mergeSelection)}
               >
                 {proposal.ok
                   ? `Package as ${proposal.candidate.name}`
                   : 'Package'}
                 <kbd>M</kbd>
               </button>
-              <button onClick={() => setState((s) => (s ? setOutput(s) : s))}>
+              <button onClick={() => edit(setOutput)}>
                 Set as output
               </button>
             </div>

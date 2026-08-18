@@ -18,5 +18,6 @@ export * from './edit.js';
 export * from './board.js';
 export * from './duel.js';
 export * from './serialize.js';
+export * from './synthesis.js';
 export * from './random.js';
 export * from './generate.js';

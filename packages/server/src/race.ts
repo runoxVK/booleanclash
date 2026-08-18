@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   CircuitError,
-  evaluateOutput,
+  evaluate,
   fromWire,
   generatePuzzle,
   rowsMatching,
@@ -326,12 +326,32 @@ export function submitRace(ctx: Context, raceId: string, body: unknown) {
     throw new ApiError(400, 'That circuit has the wrong number of inputs.');
   }
 
+  /* Judge the whole board, not just whatever is docked as the output.
+     Closeness read only from the docked output was always 0 until the player had
+     already solved it, which made the "closest wins" tiebreak useless. And a
+     board that computes the target has solved it whether or not the player got
+     round to docking it — so take the cheapest part that matches. */
   const target = BigInt(race.target);
-  const produced = evaluateOutput(rebuilt.circuit, rebuilt.registry);
-  const solved = produced !== null && produced === target;
-  const score = totalScore(rebuilt.circuit, rebuilt.registry);
-  const close =
-    produced === null ? 0 : rowsMatching(produced, target, race.input_count);
+  const produced = evaluate(rebuilt.circuit, rebuilt.registry);
+
+  let close = 0;
+  let solvedScore: number | null = null;
+  for (const [id, value] of produced) {
+    const node = rebuilt.circuit.nodes.get(id);
+    if (!node || node.kind === 'INPUT') continue;
+
+    close = Math.max(close, rowsMatching(value, target, race.input_count));
+    if (value === target) {
+      const asOutput = totalScore(
+        { ...rebuilt.circuit, outputId: id },
+        rebuilt.registry,
+      );
+      if (solvedScore === null || asOutput < solvedScore) solvedScore = asOutput;
+    }
+  }
+
+  const solved = solvedScore !== null;
+  const score = solvedScore ?? totalScore(rebuilt.circuit, rebuilt.registry);
 
   const now = Date.now();
   const wasSolvedAt = seat === 0 ? race.solved0_at : race.solved1_at;
