@@ -3,14 +3,14 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 /**
- * `base` only applies to production builds. GitHub Pages serves a project repo
- * from /<repo>/, so assets need that prefix — but applying it in dev would move
- * the dev server to localhost:5173/booleanclash/ for no reason.
+ * Serve from the root by default, which is what local preview and every
+ * drag-and-drop host (Netlify, Vercel, Cloudflare Pages) expect.
  *
- * Deploying somewhere that serves from the root (Vercel, Netlify, a custom
- * domain) instead? Set BASE_PATH=/ and this gets out of the way.
+ * GitHub Pages is the odd one out: a project repo is served from /<repo>/, so
+ * that workflow sets BASE_PATH=/booleanclash/ instead of this being the default
+ * and quietly breaking everywhere else.
  */
-const BASE = process.env.BASE_PATH ?? '/booleanclash/';
+const BASE = process.env.BASE_PATH ?? '/';
 
 // Keyed on `mode`, not `command`: `vite preview` reports command 'serve' just
 // like the dev server, so keying on command would serve the built site from '/'

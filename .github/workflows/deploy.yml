@@ -1,8 +1,10 @@
 name: Deploy
 
+# Manual only. Publishing to GitHub Pages from a private repo needs a paid plan,
+# and nothing here should push the game public on its own. Run it from the
+# Actions tab when you actually want to publish — and set Settings > Pages >
+# Source to "GitHub Actions" first, or it will fail.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # Needed by actions/deploy-pages to publish and to mint its OIDC token.
@@ -32,7 +34,10 @@ jobs:
       # Don't publish something that does not typecheck or pass its tests.
       - run: npm run check
 
+      # Pages serves a project repo from /<repo>/, unlike everywhere else.
       - run: npm run build
+        env:
+          BASE_PATH: /booleanclash/
 
       - uses: actions/configure-pages@v5
 
